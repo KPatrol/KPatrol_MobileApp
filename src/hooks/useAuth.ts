@@ -36,7 +36,26 @@ interface AuthResponse {
   refreshToken: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// API base URL including /api prefix — matches backend global prefix
+const _API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:4001`
+    : 'http://localhost:4001');
+const API_URL = `${_API_BASE}/api`;
+
+const AUTH_COOKIE = 'kpatrol_access_token';
+
+function setAuthCookie(token: string, days = 7) {
+  if (typeof document === 'undefined') return;
+  const expires = new Date(Date.now() + days * 86_400_000).toUTCString();
+  document.cookie = `${AUTH_COOKIE}=${token}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function clearAuthCookie() {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${AUTH_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+}
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
@@ -64,6 +83,7 @@ export function useAuth() {
           });
 
           if (response.ok) {
+            setAuthCookie(token);
             setState({
               user,
               token,
@@ -113,6 +133,7 @@ export function useAuth() {
         localStorage.setItem('accessToken', data.accessToken);
         localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('user', JSON.stringify(data.user));
+        setAuthCookie(data.accessToken);
 
         setState({
           user: data.user,
@@ -153,6 +174,7 @@ export function useAuth() {
         // Store tokens
         localStorage.setItem('accessToken', authData.accessToken);
         localStorage.setItem('user', JSON.stringify(authData.user));
+        setAuthCookie(authData.accessToken, credentials.rememberMe ? 30 : 1);
         
         if (credentials.rememberMe) {
           localStorage.setItem('refreshToken', authData.refreshToken);
@@ -199,6 +221,7 @@ export function useAuth() {
         localStorage.setItem('accessToken', authData.accessToken);
         localStorage.setItem('refreshToken', authData.refreshToken);
         localStorage.setItem('user', JSON.stringify(authData.user));
+        setAuthCookie(authData.accessToken);
 
         setState({
           user: authData.user,
@@ -238,7 +261,9 @@ export function useAuth() {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
+    localStorage.removeItem('selectedRobotId');
     sessionStorage.removeItem('refreshToken');
+    clearAuthCookie();
 
     setState({
       user: null,
@@ -246,6 +271,11 @@ export function useAuth() {
       isAuthenticated: false,
       isLoading: false,
     });
+
+    // Hard redirect so all providers (RobotProvider, etc.) reset cleanly
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   }, []);
 
   // Update profile

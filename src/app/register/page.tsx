@@ -4,27 +4,41 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { 
-  Bot, 
-  Mail, 
-  Lock, 
-  Eye, 
-  EyeOff, 
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
   ArrowRight,
   Loader2,
   AlertCircle,
   User,
   Check,
-  X
+  X,
+  Sparkles,
+  Zap,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 
+const onboardSteps = [
+  { step: 1, title: 'Đăng ký tài khoản', desc: 'Điền thông tin cơ bản' },
+  { step: 2, title: 'Thêm robot đầu tiên', desc: 'Nhập mã serial của thiết bị' },
+  { step: 3, title: 'Sẵn sàng vận hành', desc: 'Điều khiển & xem camera ngay' },
+];
+
+const benefits = [
+  { icon: Sparkles, label: 'Dùng thử miễn phí' },
+  { icon: Zap, label: 'Triển khai dưới 5 phút' },
+  { icon: Users, label: 'Hỗ trợ đa người dùng' },
+];
+
 export default function RegisterPage() {
   const router = useRouter();
   const { register, isLoading } = useAuth();
-  
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +47,6 @@ export default function RegisterPage() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState('');
 
-  // Password validation rules
   const passwordRules = [
     { label: 'Ít nhất 8 ký tự', valid: password.length >= 8 },
     { label: 'Có chữ hoa', valid: /[A-Z]/.test(password) },
@@ -42,8 +55,14 @@ export default function RegisterPage() {
     { label: 'Có ký tự đặc biệt', valid: /[!@#$%^&*(),.?":{}|<>]/.test(password) },
   ];
 
-  const isPasswordValid = passwordRules.every(rule => rule.valid);
+  const validCount = passwordRules.filter((r) => r.valid).length;
+  const isPasswordValid = validCount === passwordRules.length;
   const doPasswordsMatch = password === confirmPassword && confirmPassword.length > 0;
+
+  const strengthColor =
+    validCount <= 2 ? 'bg-red-500' : validCount <= 4 ? 'bg-amber-500' : 'bg-emerald-500';
+  const strengthLabel =
+    validCount === 0 ? '' : validCount <= 2 ? 'Yếu' : validCount <= 4 ? 'Trung bình' : 'Mạnh';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,24 +72,20 @@ export default function RegisterPage() {
       setError('Vui lòng nhập đầy đủ thông tin');
       return;
     }
-
     if (!isPasswordValid) {
-      setError('Mật khẩu không đáp ứng yêu cầu bảo mật');
+      setError('Mật khẩu chưa đáp ứng yêu cầu bảo mật');
       return;
     }
-
     if (!doPasswordsMatch) {
       setError('Mật khẩu xác nhận không khớp');
       return;
     }
-
     if (!agreeTerms) {
       setError('Vui lòng đồng ý với điều khoản sử dụng');
       return;
     }
 
     const result = await register({ name, email, password });
-    
     if (result.success) {
       router.push('/');
     } else {
@@ -80,238 +95,267 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-dark-bg flex">
-      {/* Left Panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-accent-600 via-kpatrol-500 to-kpatrol-600 relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          }} />
+      {/* ── Left Panel — Onboarding ──────────────────────────────────────── */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900">
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute top-1/4 right-0 w-[600px] h-[600px] bg-accent-500/15 rounded-full blur-[120px]" />
+          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-kpatrol-500/20 rounded-full blur-[120px]" />
         </div>
+        <div className="absolute inset-0 grid-bg opacity-30" />
 
-        {/* Content */}
-        <div className="relative z-10 flex flex-col justify-center px-16">
-          <div className="flex items-center gap-4 mb-8">
-            <Image 
-              src="/logo_with_branchname.png" 
-              alt="K-Patrol Logo" 
-              width={200} 
-              height={80}
-              className="object-contain"
-            />
+        <div className="relative z-10 flex flex-col justify-between p-16 w-full">
+          <div className="inline-flex self-start">
+            <div className="bg-white rounded-2xl px-6 py-4 shadow-2xl shadow-kpatrol-500/20 ring-1 ring-white/20">
+              <Image
+                src="/logo_with_branchname.png"
+                alt="K-Patrol"
+                width={220}
+                height={88}
+                className="object-contain"
+                priority
+              />
+            </div>
           </div>
 
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Tạo tài khoản mới
-          </h2>
-          <p className="text-white/80 text-lg max-w-md">
-            Đăng ký để bắt đầu sử dụng hệ thống điều khiển robot tuần tra K-Patrol.
-          </p>
+          <div className="max-w-lg">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-6">
+              <Sparkles className="w-3 h-3" />
+              Dùng thử miễn phí · Không cần thẻ tín dụng
+            </div>
+            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight mb-4">
+              Vận hành robot trong{' '}
+              <span className="text-gradient-blue">3 bước đơn giản</span>
+            </h1>
+            <p className="text-slate-400 text-lg">
+              Chỉ cần một tài khoản, bạn đã có đầy đủ công cụ để giám sát, điều khiển
+              và phân tích đội robot tuần tra của mình.
+            </p>
+          </div>
 
-          {/* Steps */}
-          <div className="mt-12 space-y-6">
-            {[
-              { step: 1, title: 'Đăng ký tài khoản', desc: 'Điền thông tin cơ bản' },
-              { step: 2, title: 'Xác minh email', desc: 'Kiểm tra hộp thư đến' },
-              { step: 3, title: 'Kết nối robot', desc: 'Cấu hình thiết bị của bạn' },
-            ].map((item, index) => (
-              <div key={index} className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold shrink-0">
-                  {item.step}
+          <div className="space-y-5">
+            {onboardSteps.map((item) => (
+              <div key={item.step} className="flex items-start gap-4 group">
+                <div className="relative shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-kpatrol-500 to-accent-500 flex items-center justify-center text-white font-bold shadow-lg shadow-kpatrol-500/30 group-hover:scale-110 transition-transform">
+                    {item.step}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-white font-medium">{item.title}</p>
-                  <p className="text-white/60 text-sm">{item.desc}</p>
+                <div className="pt-1">
+                  <p className="text-white font-semibold">{item.title}</p>
+                  <p className="text-slate-500 text-sm mt-0.5">{item.desc}</p>
                 </div>
               </div>
             ))}
+
+            <div className="flex flex-wrap gap-2 pt-4 border-t border-white/5">
+              {benefits.map(({ icon: Icon, label }) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs"
+                >
+                  <Icon className="w-3.5 h-3.5 text-kpatrol-400" />
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-
-        {/* Decorative Elements */}
-        <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
-        <div className="absolute -top-20 -left-20 w-60 h-60 bg-kpatrol-400/30 rounded-full blur-3xl" />
       </div>
 
-      {/* Right Panel - Register Form */}
-      <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
-        <div className="w-full max-w-md py-8">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <Image 
-              src="/logo.png" 
-              alt="K-Patrol Logo" 
-              width={48} 
-              height={48}
-              className="object-contain"
-            />
-            <span className="text-2xl font-bold text-gradient">K-Patrol</span>
+      {/* ── Right Panel — Register Form ──────────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 overflow-y-auto relative">
+        <div className="lg:hidden absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-kpatrol-500/10 rounded-full blur-[100px]" />
+        </div>
+
+        <div className="w-full max-w-md py-8 relative">
+          <div className="lg:hidden flex justify-center mb-10">
+            <div className="bg-white rounded-2xl px-5 py-3 shadow-xl shadow-kpatrol-500/20">
+              <Image
+                src="/logo_with_branchname.png"
+                alt="K-Patrol"
+                width={160}
+                height={64}
+                className="object-contain"
+                priority
+              />
+            </div>
           </div>
 
-          <div className="text-center lg:text-left mb-8">
-            <h2 className="text-2xl font-bold text-dark-text">Đăng ký</h2>
-            <p className="text-dark-muted mt-2">Tạo tài khoản K-Patrol của bạn</p>
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-white tracking-tight">Tạo tài khoản</h2>
+            <p className="text-slate-400 mt-2 text-sm">
+              Bắt đầu trải nghiệm hệ sinh thái K-Patrol chỉ trong vài phút.
+            </p>
           </div>
 
-          {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-status-error/10 border border-status-error/30 rounded-xl flex items-center gap-3 animate-slide-up">
-              <AlertCircle className="w-5 h-5 text-status-error shrink-0" />
-              <p className="text-sm text-status-error">{error}</p>
+            <div className="mb-6 p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3 animate-slide-up">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-300">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-dark-text">Họ và tên</label>
-              <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-muted" />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Họ và tên</label>
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-kpatrol-400 transition-colors" />
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Nguyễn Văn A"
-                  className="w-full pl-12 pr-4 py-3 bg-dark-surface border border-dark-border rounded-xl text-dark-text placeholder-dark-muted focus:outline-none focus:border-kpatrol-500 focus:ring-2 focus:ring-kpatrol-500/20 transition-all"
+                  autoComplete="name"
+                  className="w-full pl-12 pr-4 py-3 bg-dark-surface/70 border border-dark-border rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-kpatrol-500 focus:ring-2 focus:ring-kpatrol-500/20 focus:bg-dark-surface transition-all"
                 />
               </div>
             </div>
 
-            {/* Email */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-dark-text">Email</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-muted" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Email</label>
+              <div className="relative group">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-kpatrol-400 transition-colors" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="email@example.com"
-                  className="w-full pl-12 pr-4 py-3 bg-dark-surface border border-dark-border rounded-xl text-dark-text placeholder-dark-muted focus:outline-none focus:border-kpatrol-500 focus:ring-2 focus:ring-kpatrol-500/20 transition-all"
+                  placeholder="ten@kpatrol.io"
+                  autoComplete="email"
+                  className="w-full pl-12 pr-4 py-3 bg-dark-surface/70 border border-dark-border rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-kpatrol-500 focus:ring-2 focus:ring-kpatrol-500/20 focus:bg-dark-surface transition-all"
                 />
               </div>
             </div>
 
-            {/* Password */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-dark-text">Mật khẩu</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-muted" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Mật khẩu</label>
+              <div className="relative group">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-kpatrol-400 transition-colors" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-12 py-3 bg-dark-surface border border-dark-border rounded-xl text-dark-text placeholder-dark-muted focus:outline-none focus:border-kpatrol-500 focus:ring-2 focus:ring-kpatrol-500/20 transition-all"
+                  autoComplete="new-password"
+                  className="w-full pl-12 pr-12 py-3 bg-dark-surface/70 border border-dark-border rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-kpatrol-500 focus:ring-2 focus:ring-kpatrol-500/20 focus:bg-dark-surface transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-dark-muted hover:text-dark-text transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                  tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
 
-              {/* Password Rules */}
               {password.length > 0 && (
-                <div className="mt-3 p-3 bg-dark-surface/50 rounded-lg space-y-2">
-                  {passwordRules.map((rule, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm">
-                      {rule.valid ? (
-                        <Check className="w-4 h-4 text-status-success" />
-                      ) : (
-                        <X className="w-4 h-4 text-dark-muted" />
-                      )}
-                      <span className={rule.valid ? 'text-status-success' : 'text-dark-muted'}>
-                        {rule.label}
-                      </span>
+                <div className="mt-3 space-y-2 animate-slide-up">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-dark-border rounded-full overflow-hidden">
+                      <div
+                        className={cn('h-full transition-all', strengthColor)}
+                        style={{ width: `${(validCount / passwordRules.length) * 100}%` }}
+                      />
                     </div>
-                  ))}
+                    <span className="text-xs font-medium text-slate-400 min-w-[70px] text-right">
+                      {strengthLabel}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 p-3 bg-dark-surface/40 border border-dark-border rounded-lg">
+                    {passwordRules.map((rule, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs">
+                        {rule.valid ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <X className="w-3.5 h-3.5 text-slate-600" />
+                        )}
+                        <span className={rule.valid ? 'text-emerald-400' : 'text-slate-500'}>
+                          {rule.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Confirm Password */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-dark-text">Xác nhận mật khẩu</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-muted" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Xác nhận mật khẩu</label>
+              <div className="relative group">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-kpatrol-400 transition-colors" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="new-password"
                   className={cn(
-                    "w-full pl-12 pr-12 py-3 bg-dark-surface border rounded-xl text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 transition-all",
-                    confirmPassword.length > 0 && (
-                      doPasswordsMatch 
-                        ? "border-status-success focus:border-status-success focus:ring-status-success/20" 
-                        : "border-status-error focus:border-status-error focus:ring-status-error/20"
-                    ),
-                    confirmPassword.length === 0 && "border-dark-border focus:border-kpatrol-500 focus:ring-kpatrol-500/20"
+                    'w-full pl-12 pr-12 py-3 bg-dark-surface/70 border rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:bg-dark-surface transition-all',
+                    confirmPassword.length > 0
+                      ? doPasswordsMatch
+                        ? 'border-emerald-500/60 focus:border-emerald-500 focus:ring-emerald-500/20'
+                        : 'border-red-500/60 focus:border-red-500 focus:ring-red-500/20'
+                      : 'border-dark-border focus:border-kpatrol-500 focus:ring-kpatrol-500/20',
                   )}
                 />
                 {confirmPassword.length > 0 && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     {doPasswordsMatch ? (
-                      <Check className="w-5 h-5 text-status-success" />
+                      <Check className="w-5 h-5 text-emerald-400" />
                     ) : (
-                      <X className="w-5 h-5 text-status-error" />
+                      <X className="w-5 h-5 text-red-400" />
                     )}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Terms */}
-            <label className="flex items-start gap-3 cursor-pointer">
+            <label className="flex items-start gap-2.5 cursor-pointer pt-1 select-none">
               <input
                 type="checkbox"
                 checked={agreeTerms}
                 onChange={(e) => setAgreeTerms(e.target.checked)}
-                className="mt-1 w-4 h-4 rounded border-dark-border bg-dark-surface text-kpatrol-500 focus:ring-kpatrol-500/20"
+                className="mt-0.5 w-4 h-4 rounded border-dark-border bg-dark-surface text-kpatrol-500 focus:ring-kpatrol-500/20 focus:ring-offset-dark-bg"
               />
-              <span className="text-sm text-dark-muted">
+              <span className="text-sm text-slate-400 leading-relaxed">
                 Tôi đồng ý với{' '}
-                <Link href="/terms" className="text-kpatrol-400 hover:text-kpatrol-300">
+                <Link href="/terms" className="text-kpatrol-400 hover:text-kpatrol-300 font-medium">
                   Điều khoản sử dụng
                 </Link>{' '}
                 và{' '}
-                <Link href="/privacy" className="text-kpatrol-400 hover:text-kpatrol-300">
+                <Link href="/privacy" className="text-kpatrol-400 hover:text-kpatrol-300 font-medium">
                   Chính sách bảo mật
                 </Link>
               </span>
             </label>
 
-            {/* Submit Button */}
             <Button
               type="submit"
               variant="primary"
               size="lg"
-              className="w-full"
+              className="w-full mt-2"
               disabled={isLoading || !isPasswordValid || !doPasswordsMatch || !agreeTerms}
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Đang đăng ký...
+                  Đang tạo tài khoản...
                 </>
               ) : (
                 <>
-                  Đăng ký
+                  Tạo tài khoản
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
             </Button>
           </form>
 
-          {/* Login Link */}
-          <p className="mt-8 text-center text-dark-muted">
+          <p className="mt-8 text-center text-sm text-slate-400">
             Đã có tài khoản?{' '}
-            <Link 
+            <Link
               href="/login"
-              className="text-kpatrol-400 hover:text-kpatrol-300 font-medium transition-colors"
+              className="text-kpatrol-400 hover:text-kpatrol-300 font-semibold transition-colors"
             >
               Đăng nhập
             </Link>
