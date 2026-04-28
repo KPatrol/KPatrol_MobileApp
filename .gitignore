@@ -68,3 +68,8 @@ storybook-static/
 *.tmp
 *.temp
 *.bak
+
+# ==================== Runtime Data ====================
+data/
+*.db
+*.sqlite
