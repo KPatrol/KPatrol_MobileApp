@@ -1,334 +1,488 @@
 'use client';
 
-import { 
-  Battery, 
-  Thermometer, 
-  Gauge, 
-  Cpu, 
-  HardDrive,
-  Clock,
-  Activity,
+import {
+  Battery,
+  Gauge,
   Wifi,
   WifiOff,
   Zap,
-  Navigation,
   AlertTriangle,
   CheckCircle,
   MapPin,
-  TrendingUp
+  Activity,
+  Satellite,
+  RefreshCw,
 } from 'lucide-react';
-import { useRobotStore } from '@/store/robotStore';
+import { useRobotStore, type Alert } from '@/store/robotStore';
+import { useMQTT } from '@/providers/MQTTProvider';
+import { useAppMode } from '@/providers/AppModeProvider';
 import { formatDuration } from '@/lib/utils';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { StatusBadge, Badge } from '@/components/ui/Badge';
-import { Progress, BatteryProgress, CircularProgress } from '@/components/ui/Progress';
-import { Button } from '@/components/ui/Button';
-import { MotorStatus } from '@/components/dashboard/MotorStatus';
+import { Progress } from '@/components/ui/Progress';
 import { QuickActions } from '@/components/dashboard/QuickActions';
+import { PhenikaaMap } from '@/components/map/PhenikaaMap';
+import { cn } from '@/lib/utils';
+
+const fmt = {
+  pct: (v?: number) => (v == null ? '—' : `${Math.round(v)}%`),
+  speed: (v?: number) => (v == null ? '—' : v.toFixed(2)),
+  coord: (v?: number, digits = 4) => (v == null ? '—' : v.toFixed(digits)),
+  duration: (v?: number) => (v == null ? '—' : formatDuration(v)),
+};
 
 export function DashboardView() {
-  const { 
-    batteryLevel, 
-    temperature, 
-    speed, 
-    cpuUsage, 
-    memoryUsage, 
-    uptime,
-    isConnected,
-    position,
-    motors
-  } = useRobotStore();
+  const alerts = useRobotStore((s) => s.alerts);
+  const { isDev } = useAppMode();
+
+  const {
+    isConnected: mqttConnected,
+    isRobotOnline,
+    isMotorControllerOnline,
+    isEncoderReaderOnline,
+    robotStatus,
+    lastHeartbeat,
+    connect,
+    motors,
+    gpsData,
+  } = useMQTT();
+
+  const battery = robotStatus?.battery;
+  const speed = robotStatus?.speed;
+  const latency = lastHeartbeat ? Date.now() - lastHeartbeat : null;
+
+  const activeMotors = motors
+    ? (['FR', 'FL', 'BR', 'BL'] as const).filter((pos) => {
+        const m = motors[pos];
+        return m && typeof m !== 'number' && m.direction !== 'stopped' && (m.speed ?? 0) > 0;
+      }).length
+    : 0;
+
+  const sats = gpsData?.satellites ?? 0;
+  const hasFix = !!(
+    gpsData?.connected &&
+    typeof gpsData.latitude === 'number' &&
+    typeof gpsData.longitude === 'number'
+  );
+
+  const alertsCount = alerts.length;
+  const dataReady = mqttConnected && isRobotOnline && robotStatus != null;
 
   return (
-    <div className="space-y-6">
-      {/* Connection Status Banner */}
-      {!isConnected ? (
-        <div className="bg-status-offline/10 border border-status-offline/30 rounded-xl p-4 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-status-offline/20 rounded-lg">
-              <WifiOff className="w-5 h-5 text-status-offline" />
-            </div>
-            <div>
-              <p className="font-medium text-status-offline">Mất kết nối với Robot</p>
-              <p className="text-sm text-dark-muted">Đang thử kết nối lại...</p>
-            </div>
-          </div>
-          <Button variant="danger" size="sm">
-            Kết nối lại
-          </Button>
-        </div>
-      ) : (
-        <div className="bg-status-online/10 border border-status-online/30 rounded-xl p-4 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-status-online/20 rounded-lg">
-              <Wifi className="w-5 h-5 text-status-online" />
-            </div>
-            <div>
-              <p className="font-medium text-status-online">Robot đang hoạt động</p>
-              <p className="text-sm text-dark-muted">Kết nối ổn định • Độ trễ: 23ms</p>
-            </div>
-          </div>
-          <StatusBadge status="online" />
-        </div>
-      )}
+    <div className="h-full flex flex-col gap-3 md:gap-4 min-h-0">
+      <ConnectionBar
+        mqttConnected={mqttConnected}
+        isRobotOnline={isRobotOnline}
+        isMotorControllerOnline={isMotorControllerOnline}
+        isEncoderReaderOnline={isEncoderReaderOnline}
+        isDev={isDev}
+        latency={latency}
+        onReconnect={connect}
+      />
 
-      {/* Main Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Battery Card */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-kpatrol-500/20 rounded-lg">
-              <Battery className="w-5 h-5 text-kpatrol-400" />
-            </div>
-            <Badge variant={batteryLevel > 50 ? 'success' : batteryLevel > 20 ? 'warning' : 'danger'}>
-              {batteryLevel > 50 ? 'Tốt' : batteryLevel > 20 ? 'Trung bình' : 'Thấp'}
-            </Badge>
-          </div>
-          <p className="text-2xl font-bold text-dark-text">{batteryLevel}%</p>
-          <p className="text-sm text-dark-muted mb-3">Dung lượng pin</p>
-          <Progress value={batteryLevel} size="sm" />
-        </Card>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 shrink-0">
+        <KpiTile
+          icon={<Battery className="w-4 h-4" />}
+          tone="kpatrol"
+          label="PIN"
+          value={fmt.pct(battery)}
+          status={
+            battery == null ? null : battery > 50 ? 'good' : battery > 20 ? 'warn' : 'bad'
+          }
+          statusLabel={battery == null ? null : battery > 50 ? 'Tốt' : battery > 20 ? 'TB' : 'Thấp'}
+          footer={battery != null && <Progress value={battery} size="sm" />}
+        />
+        <KpiTile
+          icon={<Satellite className="w-4 h-4" />}
+          tone="online"
+          label="GPS"
+          value={hasFix ? fmt.coord(gpsData!.latitude!) : '—'}
+          status={hasFix && sats >= 6 ? 'good' : hasFix ? 'warn' : null}
+          statusLabel={hasFix ? `${sats} sat` : 'No fix'}
+          footer={
+            <p className="text-[11px] text-slate-500 truncate font-mono tabular-nums">
+              {hasFix ? `Lon ${fmt.coord(gpsData!.longitude!)}` : 'Chờ vệ tinh…'}
+            </p>
+          }
+        />
+        <KpiTile
+          icon={<Gauge className="w-4 h-4" />}
+          tone="accent"
+          label="TỐC ĐỘ (m/s)"
+          value={fmt.speed(speed)}
+          status={activeMotors > 0 ? 'good' : null}
+          statusLabel={`${activeMotors}/4`}
+          footer={
+            <p className="text-[11px] text-slate-500 truncate font-mono tabular-nums">
+              {speed == null ? 'Chờ motor…' : `Uptime ${fmt.duration(robotStatus?.uptime)}`}
+            </p>
+          }
+        />
+        <KpiTile
+          icon={<AlertTriangle className="w-4 h-4" />}
+          tone="warning"
+          label="CẢNH BÁO"
+          value={String(alertsCount)}
+          status={alertsCount === 0 ? 'good' : 'warn'}
+          statusLabel={alertsCount === 0 ? 'OK' : 'Mới'}
+          footer={
+            <p className="text-[11px] text-slate-500 truncate">
+              {alertsCount === 0 ? 'Không có cảnh báo' : `${alertsCount} sự kiện gần đây`}
+            </p>
+          }
+        />
+      </div>
 
-        {/* Temperature Card */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-accent-500/20 rounded-lg">
-              <Thermometer className="w-5 h-5 text-accent-400" />
-            </div>
-            <Badge variant={temperature < 50 ? 'success' : temperature < 70 ? 'warning' : 'danger'}>
-              {temperature < 50 ? 'Bình thường' : temperature < 70 ? 'Ấm' : 'Nóng'}
-            </Badge>
-          </div>
-          <p className="text-2xl font-bold text-dark-text">{temperature}°C</p>
-          <p className="text-sm text-dark-muted mb-3">Nhiệt độ hệ thống</p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-dark-border rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all ${
-                  temperature < 50 ? 'bg-status-online' : temperature < 70 ? 'bg-status-warning' : 'bg-status-offline'
-                }`}
-                style={{ width: `${Math.min(temperature, 100)}%` }}
+      {/* Main canvas */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)] gap-3 md:gap-4">
+        {/* Live map — HUD card */}
+        <div className="relative rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-kpatrol-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col min-h-[260px]">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-[401]" />
+
+          <div className="absolute top-3 left-3 z-[400] flex items-center gap-2 pointer-events-none">
+            <div className="px-3 py-1.5 rounded-full bg-slate-950/80 backdrop-blur-md ring-1 ring-slate-700/60 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.25)]">
+              <span
+                className={cn(
+                  'w-2 h-2 rounded-full',
+                  hasFix ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]' : 'bg-orange-400',
+                )}
               />
+              {hasFix ? 'LIVE' : 'WAIT GPS'}
             </div>
-            <span className="text-xs text-dark-muted">100°C</span>
+            <div className="px-3 py-1.5 rounded-full bg-slate-950/80 backdrop-blur-md ring-1 ring-slate-700/60 flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold text-slate-400">
+              <MapPin className="w-3 h-3 text-kpatrol-400" />
+              <span className="hidden sm:inline">Phenikaa Campus</span>
+              <span className="sm:hidden">Campus</span>
+            </div>
           </div>
-        </Card>
 
-        {/* Speed Card */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-status-online/20 rounded-lg">
-              <Gauge className="w-5 h-5 text-status-online" />
-            </div>
-            <Badge variant="primary">
-              <Zap className="w-3 h-3" />
-              Hoạt động
-            </Badge>
+          <div className="flex-1 min-h-0">
+            <PhenikaaMap
+              gpsData={gpsData}
+              showRoadNetwork
+              followRobot
+              height="100%"
+              initialZoom={17}
+            />
           </div>
-          <p className="text-2xl font-bold text-dark-text">{speed.toFixed(1)}</p>
-          <p className="text-sm text-dark-muted mb-3">Tốc độ (m/s)</p>
-          <div className="flex items-center gap-1 text-xs text-dark-muted">
-            <TrendingUp className="w-3 h-3 text-status-online" />
-            <span>Tốc độ tối đa: 2.0 m/s</span>
-          </div>
-        </Card>
 
-        {/* Uptime Card */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-status-warning/20 rounded-lg">
-              <Clock className="w-5 h-5 text-status-warning" />
+          <div className="absolute bottom-3 left-3 right-3 z-[400] flex items-center justify-between gap-2 pointer-events-none">
+            <div className="px-3 py-1.5 rounded-full bg-slate-950/80 backdrop-blur-md ring-1 ring-slate-700/60 text-[11px] font-mono tabular-nums text-cyan-300">
+              {hasFix
+                ? `${fmt.coord(gpsData!.latitude!, 5)}, ${fmt.coord(gpsData!.longitude!, 5)}`
+                : '—, —'}
             </div>
-            <Badge variant="default">Đang chạy</Badge>
+            {!dataReady && (
+              <div className="px-3 py-1.5 rounded-full bg-amber-500/20 backdrop-blur-md ring-1 ring-amber-500/40 text-[11px] uppercase tracking-wider font-bold text-amber-300">
+                Đang chờ telemetry
+              </div>
+            )}
           </div>
-          <p className="text-2xl font-bold text-dark-text">{formatDuration(uptime)}</p>
-          <p className="text-sm text-dark-muted mb-3">Thời gian hoạt động</p>
-          <div className="flex items-center gap-1 text-xs text-dark-muted">
-            <Activity className="w-3 h-3" />
-            <span>Khởi động lúc 08:30</span>
+        </div>
+
+        {/* Side panel */}
+        <div className="flex flex-col gap-3 md:gap-4 min-h-0">
+          <div className="shrink-0 rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-accent-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent-400/40 to-transparent" />
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700/40 bg-slate-900/60">
+              <Zap className="w-4 h-4 text-accent-400" />
+              <span className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+                Thao tác nhanh
+              </span>
+            </div>
+            <div className="p-3 md:p-4">
+              <QuickActions />
+            </div>
           </div>
-        </Card>
+
+          <div className="rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-amber-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-col min-h-0 flex-1 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/40 bg-slate-900/60 shrink-0">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+                  Cảnh báo gần đây
+                </span>
+              </div>
+              {alertsCount > 0 && (
+                <span className="text-[11px] font-black px-2 py-0.5 rounded-md ring-1 bg-amber-500/15 text-amber-300 ring-amber-500/30">
+                  {alertsCount}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4">
+              <RecentAlerts alerts={alerts} />
+            </div>
+          </div>
+        </div>
       </div>
-
-      {/* System Resources */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* CPU Usage */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center gap-4">
-            <CircularProgress 
-              value={cpuUsage} 
-              size={70} 
-              strokeWidth={6}
-              variant={cpuUsage < 70 ? 'success' : cpuUsage < 90 ? 'warning' : 'danger'}
-            />
-            <div>
-              <p className="text-lg font-semibold text-dark-text">CPU</p>
-              <p className="text-sm text-dark-muted">Raspberry Pi 4</p>
-              <p className={`text-sm font-medium mt-1 ${
-                cpuUsage < 70 ? 'text-status-online' : cpuUsage < 90 ? 'text-status-warning' : 'text-status-offline'
-              }`}>
-                {cpuUsage < 70 ? 'Bình thường' : cpuUsage < 90 ? 'Tải cao' : 'Quá tải'}
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Memory Usage */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center gap-4">
-            <CircularProgress 
-              value={memoryUsage} 
-              size={70} 
-              strokeWidth={6}
-              variant={memoryUsage < 70 ? 'success' : memoryUsage < 90 ? 'warning' : 'danger'}
-            />
-            <div>
-              <p className="text-lg font-semibold text-dark-text">RAM</p>
-              <p className="text-sm text-dark-muted">8GB DDR4</p>
-              <p className="text-sm text-dark-muted mt-1">
-                {((memoryUsage / 100) * 8).toFixed(1)} / 8 GB
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Position */}
-        <Card variant="glow" className="p-4">
-          <div className="flex items-center gap-4">
-            <div className="w-[70px] h-[70px] bg-kpatrol-500/20 rounded-full flex items-center justify-center">
-              <MapPin className="w-8 h-8 text-kpatrol-400" />
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-dark-text">Vị trí</p>
-              <p className="text-sm text-dark-muted font-mono">
-                X: {position.x.toFixed(2)}m
-              </p>
-              <p className="text-sm text-dark-muted font-mono">
-                Y: {position.y.toFixed(2)}m
-              </p>
-              <p className="text-sm text-dark-muted font-mono">
-                θ: {position.heading.toFixed(1)}°
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Motor Status */}
-        <Card variant="glow" padding="lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-kpatrol-500" />
-              Trạng thái Motor
-            </CardTitle>
-            <StatusBadge status="online">4/4 Active</StatusBadge>
-          </CardHeader>
-          <CardContent>
-            <MotorStatus />
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card variant="glow" padding="lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-accent-400" />
-              Thao tác nhanh
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <QuickActions />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Alerts */}
-      <Card variant="glow" padding="lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-status-warning" />
-            Cảnh báo gần đây
-          </CardTitle>
-          <Button variant="ghost" size="sm">Xem tất cả</Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <AlertItem 
-              type="warning"
-              title="Pin yếu"
-              message="Dung lượng pin dưới 30%, hãy cân nhắc sạc robot"
-              time="5 phút trước"
-            />
-            <AlertItem 
-              type="info"
-              title="Cập nhật firmware"
-              message="Phiên bản mới v2.1.0 đã sẵn sàng"
-              time="1 giờ trước"
-            />
-            <AlertItem 
-              type="success"
-              title="Tuần tra hoàn tất"
-              message="Robot đã hoàn thành tuyến tuần tra A1"
-              time="2 giờ trước"
-            />
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-// Alert Item Component
-function AlertItem({ 
-  type, 
-  title, 
-  message, 
-  time 
-}: { 
+// --- Sub-components -----------------------------------------------------
+
+const TONE_CLASS: Record<
+  string,
+  { ring: string; iconBg: string; iconFg: string; valueFg: string; glow: string }
+> = {
+  kpatrol: {
+    ring: 'border-kpatrol-500/30',
+    iconBg: 'bg-kpatrol-500/15',
+    iconFg: 'text-kpatrol-400',
+    valueFg: 'text-cyan-300',
+    glow: 'shadow-[0_0_24px_rgba(34,211,238,0.10)]',
+  },
+  accent: {
+    ring: 'border-accent-500/30',
+    iconBg: 'bg-accent-500/15',
+    iconFg: 'text-accent-400',
+    valueFg: 'text-accent-300',
+    glow: 'shadow-[0_0_24px_rgba(167,139,250,0.10)]',
+  },
+  online: {
+    ring: 'border-emerald-500/30',
+    iconBg: 'bg-emerald-500/15',
+    iconFg: 'text-emerald-400',
+    valueFg: 'text-emerald-300',
+    glow: 'shadow-[0_0_24px_rgba(74,222,128,0.10)]',
+  },
+  warning: {
+    ring: 'border-amber-500/30',
+    iconBg: 'bg-amber-500/15',
+    iconFg: 'text-amber-400',
+    valueFg: 'text-amber-300',
+    glow: 'shadow-[0_0_24px_rgba(251,191,36,0.10)]',
+  },
+};
+
+const STATUS_PILL: Record<'good' | 'warn' | 'bad', string> = {
+  good: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  warn: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  bad: 'bg-red-500/15 text-red-300 ring-red-500/30',
+};
+
+function KpiTile({
+  icon,
+  tone,
+  label,
+  value,
+  status,
+  statusLabel,
+  footer,
+}: {
+  icon: React.ReactNode;
+  tone: keyof typeof TONE_CLASS;
+  label: string;
+  value: string;
+  status?: 'good' | 'warn' | 'bad' | null;
+  statusLabel?: string | null;
+  footer?: React.ReactNode;
+}) {
+  const t = TONE_CLASS[tone];
+  return (
+    <div
+      className={cn(
+        'relative rounded-2xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border backdrop-blur-sm overflow-hidden p-3 md:p-3.5 flex flex-col gap-2',
+        t.ring,
+        t.glow,
+      )}
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent" />
+      <div className="flex items-center justify-between gap-1">
+        <div className={cn('p-1.5 rounded-lg', t.iconBg, t.iconFg)}>{icon}</div>
+        {status && statusLabel && (
+          <span
+            className={cn(
+              'text-[10px] font-black px-1.5 py-0.5 rounded-md ring-1 uppercase tracking-wider',
+              STATUS_PILL[status],
+            )}
+          >
+            {statusLabel}
+          </span>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p
+          className={cn(
+            'text-xl md:text-2xl font-black truncate leading-tight tabular-nums',
+            t.valueFg,
+          )}
+        >
+          {value}
+        </p>
+        <p className="text-[10px] md:text-[11px] uppercase tracking-widest text-slate-500 font-bold truncate mt-0.5">
+          {label}
+        </p>
+      </div>
+      {footer && <div className="mt-0.5">{footer}</div>}
+    </div>
+  );
+}
+
+function ConnectionBar({
+  mqttConnected,
+  isRobotOnline,
+  isMotorControllerOnline,
+  isEncoderReaderOnline,
+  isDev,
+  latency,
+  onReconnect,
+}: {
+  mqttConnected: boolean;
+  isRobotOnline: boolean;
+  isMotorControllerOnline: boolean;
+  isEncoderReaderOnline: boolean;
+  isDev: boolean;
+  latency: number | null;
+  onReconnect: () => void;
+}) {
+  const tone = !mqttConnected
+    ? {
+        bg: 'bg-red-500/10',
+        border: 'border-red-500/40',
+        fg: 'text-red-300',
+        glow: 'shadow-[0_0_18px_rgba(239,68,68,0.15)]',
+        Icon: WifiOff,
+      }
+    : !isRobotOnline
+      ? {
+          bg: 'bg-amber-500/10',
+          border: 'border-amber-500/40',
+          fg: 'text-amber-300',
+          glow: 'shadow-[0_0_18px_rgba(251,191,36,0.15)]',
+          Icon: Wifi,
+        }
+      : {
+          bg: 'bg-emerald-500/10',
+          border: 'border-emerald-500/40',
+          fg: 'text-emerald-300',
+          glow: 'shadow-[0_0_18px_rgba(74,222,128,0.18)]',
+          Icon: Wifi,
+        };
+
+  const message = !mqttConnected
+    ? 'Mất kết nối broker — đang thử lại…'
+    : !isRobotOnline
+      ? 'MQTT OK · Robot offline (chờ heartbeat)'
+      : `Robot online${isDev && latency != null && latency < 5000 ? ` · ${latency}ms` : ''}`;
+
+  return (
+    <div
+      className={cn(
+        'relative shrink-0 rounded-2xl border backdrop-blur-sm px-3 py-2.5 flex items-center justify-between gap-2 overflow-hidden',
+        tone.bg,
+        tone.border,
+        tone.glow,
+      )}
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-40" />
+      <div className="flex items-center gap-2 min-w-0">
+        <tone.Icon className={cn('w-4 h-4 shrink-0', tone.fg)} />
+        <p
+          className={cn(
+            'text-xs md:text-sm font-bold uppercase tracking-wider truncate',
+            tone.fg,
+          )}
+        >
+          {message}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {isDev && (
+          <div className="hidden md:flex items-center gap-1">
+            <Pill on={mqttConnected} label="MQTT" />
+            <Pill on={isRobotOnline} label="Pi" />
+            <Pill on={isMotorControllerOnline} label="S3" />
+            <Pill on={isEncoderReaderOnline} label="Enc" amberOff />
+          </div>
+        )}
+        {!mqttConnected && (
+          <button
+            onClick={onReconnect}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-red-500/20 hover:bg-red-500/30 ring-1 ring-red-500/40 text-red-200 text-xs font-bold uppercase tracking-wider transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span className="hidden sm:inline">Kết nối lại</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentAlerts({ alerts }: { alerts: Alert[] }) {
+  if (alerts.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center py-6 gap-2">
+        <CheckCircle className="w-10 h-10 text-emerald-400/60" />
+        <p className="text-sm text-slate-400">Chưa có cảnh báo nào</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold">
+          All systems nominal
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {alerts.map((alert) => {
+        const ago = Math.floor((Date.now() - new Date(alert.timestamp).getTime()) / 1000);
+        const timeStr =
+          ago < 60
+            ? 'Vừa xong'
+            : ago < 3600
+              ? `${Math.floor(ago / 60)}p`
+              : `${Math.floor(ago / 3600)}h`;
+        return <AlertRow key={alert.id} type={alert.type} title={alert.title} message={alert.message} time={timeStr} />;
+      })}
+    </div>
+  );
+}
+
+function AlertRow({
+  type,
+  title,
+  message,
+  time,
+}: {
   type: 'warning' | 'info' | 'success' | 'error';
   title: string;
   message: string;
   time: string;
 }) {
   const config = {
-    warning: {
-      icon: AlertTriangle,
-      bg: 'bg-status-warning/10',
-      border: 'border-status-warning/20',
-      iconColor: 'text-status-warning',
-    },
-    info: {
-      icon: Activity,
-      bg: 'bg-kpatrol-500/10',
-      border: 'border-kpatrol-500/20',
-      iconColor: 'text-kpatrol-400',
-    },
-    success: {
-      icon: CheckCircle,
-      bg: 'bg-status-online/10',
-      border: 'border-status-online/20',
-      iconColor: 'text-status-online',
-    },
-    error: {
-      icon: AlertTriangle,
-      bg: 'bg-status-offline/10',
-      border: 'border-status-offline/20',
-      iconColor: 'text-status-offline',
-    },
+    warning: { Icon: AlertTriangle, ring: 'ring-amber-500/30', bg: 'bg-amber-500/5', fg: 'text-amber-400' },
+    info: { Icon: Activity, ring: 'ring-cyan-500/30', bg: 'bg-cyan-500/5', fg: 'text-cyan-400' },
+    success: { Icon: CheckCircle, ring: 'ring-emerald-500/30', bg: 'bg-emerald-500/5', fg: 'text-emerald-400' },
+    error: { Icon: AlertTriangle, ring: 'ring-red-500/30', bg: 'bg-red-500/5', fg: 'text-red-400' },
   };
-
-  const { icon: Icon, bg, border, iconColor } = config[type];
-
+  const { Icon, ring, bg, fg } = config[type];
   return (
-    <div className={`flex items-start gap-3 p-3 rounded-lg ${bg} border ${border}`}>
-      <Icon className={`w-5 h-5 ${iconColor} flex-shrink-0 mt-0.5`} />
+    <div className={cn('flex items-start gap-2 p-2.5 rounded-lg ring-1', ring, bg)}>
+      <Icon className={cn('w-4 h-4 flex-shrink-0 mt-0.5', fg)} />
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-dark-text">{title}</p>
-        <p className="text-sm text-dark-muted">{message}</p>
+        <p className="text-sm font-semibold text-slate-200 truncate">{title}</p>
+        <p className="text-xs text-slate-400 truncate">{message}</p>
       </div>
-      <span className="text-xs text-dark-muted whitespace-nowrap">{time}</span>
+      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 whitespace-nowrap">
+        {time}
+      </span>
+    </div>
+  );
+}
+
+function Pill({ on, label, amberOff }: { on: boolean; label: string; amberOff?: boolean }) {
+  return (
+    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-950/60 rounded-full ring-1 ring-slate-700/40">
+      <div
+        className={cn(
+          'w-1.5 h-1.5 rounded-full',
+          on
+            ? 'bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]'
+            : amberOff
+              ? 'bg-amber-400'
+              : 'bg-red-400',
+        )}
+      />
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
     </div>
   );
 }
