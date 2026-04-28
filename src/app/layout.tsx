@@ -1,17 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ToastProvider } from '@/components/ui/Toast';
-
-const inter = Inter({ 
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-});
+import { MQTTProvider } from '@/providers/MQTTProvider';
+import { AuthProvider } from '@/providers/AuthProvider';
+import { RobotProvider } from '@/providers/RobotProvider';
+import { AppModeProvider } from '@/providers/AppModeProvider';
+import { I18nProvider } from '@/lib/i18n';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 
 export const metadata: Metadata = {
   title: 'K-Patrol Control',
@@ -43,10 +38,33 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className="dark">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <ToastProvider>
-          {children}
-        </ToastProvider>
+      <head>
+        <link rel="preconnect" href="https://a.tile.openstreetmap.org" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://b.tile.openstreetmap.org" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://c.tile.openstreetmap.org" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+      </head>
+      <body className="font-sans antialiased">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-kpatrol-500 focus:text-white focus:px-3 focus:py-2 focus:rounded"
+        >
+          Chuyển đến nội dung chính
+        </a>
+        <I18nProvider>
+          <AppModeProvider>
+            <AuthProvider>
+              <RobotProvider>
+                <MQTTProvider>
+                  <ToastProvider>
+                    <main id="main-content">{children}</main>
+                  </ToastProvider>
+                </MQTTProvider>
+              </RobotProvider>
+            </AuthProvider>
+          </AppModeProvider>
+        </I18nProvider>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
