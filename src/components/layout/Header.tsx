@@ -25,31 +25,30 @@ import {
 import { useRobotStore } from '@/store/robotStore';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import { useMQTT } from '@/providers/MQTTProvider';
 
 interface HeaderProps {
   onMenuClick: () => void;
   title: string;
 }
 
-interface Notification {
-  id: string;
-  type: 'info' | 'warning' | 'error' | 'success';
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-}
-
 export function Header({ onMenuClick, title }: HeaderProps) {
-  const { isConnected, batteryLevel } = useRobotStore();
+  const { alerts, markAllAlertsRead, markAlertRead, batteryLevel: storeBattery } = useRobotStore();
+  const mqtt = useMQTT();
+  const batteryLevel = mqtt.robotStatus?.battery ?? storeBattery;
+  const isConnected = mqtt.isConnected;
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications] = useState<Notification[]>([
-    { id: '1', type: 'warning', title: 'Pin yếu', message: 'Pin robot còn 20%, hãy sạc sớm', time: '5 phút trước', read: false },
-    { id: '2', type: 'info', title: 'Tuần tra hoàn tất', message: 'Hoàn thành tuyến đường A', time: '15 phút trước', read: false },
-    { id: '3', type: 'success', title: 'Cập nhật thành công', message: 'Firmware đã được cập nhật lên v2.1.3', time: '1 giờ trước', read: true },
-  ]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = alerts.filter(n => !n.read).length;
+
+  const formatTime = (ts: Date | string) => {
+    const d = typeof ts === 'string' ? new Date(ts) : ts;
+    const s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return 'Vừa xong';
+    if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
+    if (s < 86400) return `${Math.floor(s / 3600)} giờ trước`;
+    return `${Math.floor(s / 86400)} ngày trước`;
+  };
 
   const getBatteryIcon = () => {
     if (batteryLevel > 80) return <BatteryFull className="w-5 h-5" />;
@@ -77,9 +76,10 @@ export function Header({ onMenuClick, title }: HeaderProps) {
     <header className="h-16 bg-dark-card/80 backdrop-blur-lg border-b border-dark-border flex items-center justify-between px-4 sticky top-0 z-30">
       {/* Left: Menu + Title */}
       <div className="flex items-center gap-4">
-        <button 
+        <button
           onClick={onMenuClick}
-          className="md:hidden p-2 hover:bg-dark-surface rounded-lg transition-colors"
+          aria-label="Mở menu"
+          className="md:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] hover:bg-dark-surface rounded-lg transition-colors"
         >
           <Menu className="w-5 h-5 text-dark-text" />
         </button>
@@ -104,8 +104,13 @@ export function Header({ onMenuClick, title }: HeaderProps) {
       <div className="flex items-center gap-2 md:gap-4">
         {/* Signal Strength (Desktop) */}
         <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-dark-surface rounded-lg">
-          <SignalHigh className="w-4 h-4 text-status-success" />
-          <span className="text-xs text-dark-muted">4G</span>
+          {(() => {
+            const latency = mqtt.lastHeartbeat ? Date.now() - mqtt.lastHeartbeat : null;
+            if (!mqtt.isRobotOnline || latency == null) return <><SignalLow className="w-4 h-4 text-dark-muted" /><span className="text-xs text-dark-muted">N/A</span></>;
+            if (latency < 200) return <><SignalHigh className="w-4 h-4 text-status-success" /><span className="text-xs text-status-success">{latency}ms</span></>;
+            if (latency < 500) return <><SignalMedium className="w-4 h-4 text-status-warning" /><span className="text-xs text-status-warning">{latency}ms</span></>;
+            return <><SignalLow className="w-4 h-4 text-status-error" /><span className="text-xs text-status-error">{latency}ms</span></>;
+          })()}
         </div>
 
         {/* Battery */}
@@ -144,12 +149,13 @@ export function Header({ onMenuClick, title }: HeaderProps) {
 
         {/* Notifications */}
         <div className="relative">
-          <button 
+          <button
             onClick={() => setShowNotifications(!showNotifications)}
+            aria-label="Thông báo"
             className={cn(
-              "relative p-2 rounded-lg transition-all",
-              showNotifications 
-                ? "bg-kpatrol-500/20 text-kpatrol-400" 
+              "relative inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg transition-all",
+              showNotifications
+                ? "bg-kpatrol-500/20 text-kpatrol-400"
                 : "hover:bg-dark-surface text-dark-text"
             )}
           >
@@ -168,15 +174,17 @@ export function Header({ onMenuClick, title }: HeaderProps) {
                 className="fixed inset-0 z-40"
                 onClick={() => setShowNotifications(false)}
               />
-              <div className="absolute right-0 top-full mt-2 w-80 bg-dark-card border border-dark-border rounded-xl shadow-xl z-50 overflow-hidden animate-slide-up">
+              <div className="absolute right-0 top-full mt-2 w-[20rem] max-w-[calc(100vw-1rem)] bg-dark-card border border-dark-border rounded-xl shadow-xl z-50 overflow-hidden animate-slide-up">
                 <div className="flex items-center justify-between p-4 border-b border-dark-border">
                   <h3 className="font-semibold text-dark-text">Thông báo</h3>
-                  <button className="text-sm text-kpatrol-400 hover:text-kpatrol-300">
+                  <button className="text-sm text-kpatrol-400 hover:text-kpatrol-300" onClick={markAllAlertsRead}>
                     Đánh dấu đã đọc
                   </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {notifications.map((notification) => (
+                  {alerts.length === 0 ? (
+                    <div className="p-6 text-center text-dark-muted text-sm">Không có thông báo</div>
+                  ) : alerts.slice(0, 20).map((notification) => (
                     <div 
                       key={notification.id}
                       className={cn(
@@ -193,10 +201,10 @@ export function Header({ onMenuClick, title }: HeaderProps) {
                               <span className="w-2 h-2 bg-kpatrol-500 rounded-full" />
                             )}
                           </div>
-                          <p className="text-xs text-dark-muted mt-0.5 line-clamp-2">{notification.message}</p>
+                        <p className="text-xs text-dark-muted mt-0.5 line-clamp-2">{notification.message}</p>
                           <div className="flex items-center gap-1 mt-1.5">
                             <Clock className="w-3 h-3 text-dark-muted" />
-                            <span className="text-xs text-dark-muted">{notification.time}</span>
+                            <span className="text-xs text-dark-muted">{formatTime(notification.timestamp)}</span>
                           </div>
                         </div>
                       </div>
@@ -204,8 +212,11 @@ export function Header({ onMenuClick, title }: HeaderProps) {
                   ))}
                 </div>
                 <div className="p-3 border-t border-dark-border bg-dark-surface/30">
-                  <button className="w-full py-2 text-sm text-kpatrol-400 hover:text-kpatrol-300 font-medium transition-colors">
-                    Xem tất cả thông báo
+                  <button 
+                    className="w-full text-sm text-kpatrol-400 hover:text-kpatrol-300 font-medium transition-colors"
+                    onClick={markAllAlertsRead}
+                  >
+                    Đánh dấu đã đọc
                   </button>
                 </div>
               </div>
