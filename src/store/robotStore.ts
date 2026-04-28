@@ -82,6 +82,25 @@ export interface ControlState {
   obstacleAvoidance: boolean;
 }
 
+// User-configurable quick action shown in the sidebar.
+// `actionId` references a known catalog entry (see QUICK_ACTION_CATALOG below);
+// `enabled` toggles visibility; `active` is the latest on/off state of the action itself.
+export type QuickActionId =
+  | 'autoPatrol'
+  | 'ecoMode'
+  | 'nightMode'
+  | 'mainLight'
+  | 'warningLight'
+  | 'lockControls'
+  | 'recordSession'
+  | 'silentMode';
+
+export interface QuickActionConfig {
+  id: QuickActionId;
+  enabled: boolean;
+  active: boolean;
+}
+
 export interface AppSettings {
   darkMode: boolean;
   language: string;
@@ -91,6 +110,7 @@ export interface AppSettings {
   pushNotifications: boolean;
   soundEnabled: boolean;
   vibrationEnabled: boolean;
+  quickActions: QuickActionConfig[];
 }
 
 interface RobotStore extends RobotStatus, ControlState {
@@ -150,6 +170,8 @@ const defaultSettings: AppSettings = {
   pushNotifications: true,
   soundEnabled: false,
   vibrationEnabled: true,
+  // Empty by default — user picks their own from the catalog in Settings → Thao tác nhanh.
+  quickActions: [],
 };
 
 export const useRobotStore = create<RobotStore>()(
