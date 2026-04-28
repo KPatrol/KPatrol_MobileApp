@@ -1,13 +1,31 @@
-# K-Patrol — Mobile / Operator App
+<p align="center">
+  <img src="docs/logo.png" alt="K-Patrol" width="140" />
+</p>
 
-> Real-time control dashboard for the K-Patrol indoor patrol robot.
-> Ứng dụng điều khiển và giám sát robot tuần tra K-Patrol theo thời gian thực.
+<h1 align="center">K-Patrol — Mobile / Operator App</h1>
 
-[![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org)
-[![MQTT](https://img.shields.io/badge/MQTT-5-660066?logo=mqtt)](https://mqtt.org)
-[![PWA](https://img.shields.io/badge/PWA-ready-5a0fc8)](#pwa)
-[![License](https://img.shields.io/badge/license-MIT-green)](#license)
+<p align="center">
+  <em>Real-time control dashboard for the K-Patrol indoor patrol robot.</em><br/>
+  <em>Ứng dụng điều khiển và giám sát robot tuần tra K-Patrol theo thời gian thực.</em>
+</p>
+
+<p align="center">
+  <a href="https://nextjs.org"><img alt="Next.js" src="https://img.shields.io/badge/Next.js-14.2-black?logo=next.js" /></a>
+  <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-blue?logo=typescript" /></a>
+  <a href="https://mqtt.org"><img alt="MQTT" src="https://img.shields.io/badge/MQTT-5-660066?logo=mqtt" /></a>
+  <a href="#pwa"><img alt="PWA" src="https://img.shields.io/badge/PWA-ready-5a0fc8" /></a>
+  <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-MIT-green" /></a>
+  <a href="https://github.com/KPatrol/KPatrol_MobileApp"><img alt="Repo" src="https://img.shields.io/badge/repo-KPatrol_MobileApp-181717?logo=github" /></a>
+</p>
+
+<p align="center">
+  <a href="#overview--tổng-quan">Overview</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#tech-stack">Tech Stack</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#deployment">Deployment</a> ·
+  <a href="#license">License</a>
+</p>
 
 ---
 
