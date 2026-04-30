@@ -11,11 +11,20 @@
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:4001`
-    : 'http://localhost:4001');
+// Same-origin in production: nginx proxies /api/* → backend (see nginx/nginx.conf
+// :8001 server). This avoids cross-origin CORS preflight + cookie complexity on
+// monitor.khoavd.online. Local dev still hits backend directly on :4001.
+function resolveApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window === 'undefined') return 'http://localhost:4001';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `${window.location.protocol}//${host}:4001`;
+  }
+  return ''; // same-origin
+}
+
+const API_BASE = resolveApiBase();
 
 export const API_URL = `${API_BASE}/api`;
 
