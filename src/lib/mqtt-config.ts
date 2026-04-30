@@ -480,4 +480,9 @@ export interface DetectionAlert {
   snapshot: string;             // Relative path saved on Pi, e.g. "snapshots/1719000000_person.jpg"
   robot: string;                // Robot serial
   frame_size?: [number, number]; // [width, height]
+  // Inline base64-encoded JPEG (~25–40 KB at 320×240 q60). Empty/missing
+  // when the Pi runs without cv2 or when inline snapshots are disabled.
+  // Render with: src={`data:image/jpeg;base64,${snapshot_b64}`}
+  snapshot_b64?: string;
+  id?: number;                  // AlertStore row id, -1 when not persisted
 }
