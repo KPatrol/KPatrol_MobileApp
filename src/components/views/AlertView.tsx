@@ -190,10 +190,25 @@ export function AlertView() {
                     meta.glow
                   )}
                 >
-                  {/* Icon chip */}
-                  <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ring-1', meta.bg, meta.ring, meta.text)}>
-                    <Icon className="w-5 h-5" />
-                  </div>
+                  {/* Thumbnail (inline JPEG when Pi attached one, icon chip otherwise) */}
+                  {alert.snapshot_b64 ? (
+                    <div className={cn('relative w-16 h-16 rounded-xl overflow-hidden shrink-0 ring-1', meta.ring, meta.glow)}>
+                      <img
+                        src={`data:image/jpeg;base64,${alert.snapshot_b64}`}
+                        alt={`${meta.label} snapshot`}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      <div className={cn('absolute bottom-0 left-0 right-0 px-1 py-0.5 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider', meta.bg, meta.text)}>
+                        <Icon className="w-3 h-3" />
+                        {meta.label}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ring-1', meta.bg, meta.ring, meta.text)}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                  )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -300,11 +315,24 @@ function AlertDetailModal({ alert, onClose }: { alert: DetectionAlert; onClose: 
           </span>
         </div>
 
-        <div className="aspect-video bg-slate-950/70 border-b border-slate-700/40 flex flex-col items-center justify-center text-slate-500">
-          <ImageIcon className="w-10 h-10 mb-2 opacity-60" />
-          <p className="text-xs font-mono">{alert.snapshot ?? 'snapshot chưa có'}</p>
-          <p className="text-[10px] mt-1 uppercase tracking-wider">(Ảnh lưu trên Pi — cần tải qua API)</p>
-        </div>
+        {alert.snapshot_b64 ? (
+          <div className="relative aspect-video bg-slate-950/90 border-b border-slate-700/40 flex items-center justify-center overflow-hidden">
+            <img
+              src={`data:image/jpeg;base64,${alert.snapshot_b64}`}
+              alt={`${meta.label} snapshot`}
+              className="w-full h-full object-contain"
+            />
+            <span className="absolute top-2 left-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-slate-950/80 text-slate-300 ring-1 ring-slate-700/60 font-mono">
+              {alert.snapshot ?? 'inline JPEG'}
+            </span>
+          </div>
+        ) : (
+          <div className="aspect-video bg-slate-950/70 border-b border-slate-700/40 flex flex-col items-center justify-center text-slate-500">
+            <ImageIcon className="w-10 h-10 mb-2 opacity-60" />
+            <p className="text-xs font-mono">{alert.snapshot ?? 'snapshot chưa có'}</p>
+            <p className="text-[10px] mt-1 uppercase tracking-wider">(Ảnh lưu trên Pi — cần tải qua API)</p>
+          </div>
+        )}
 
         <div className="p-4 space-y-2">
           <Row label="Robot" value={alert.robot} mono />
