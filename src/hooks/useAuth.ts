@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { API_URL } from '@/lib/api';
 
 interface User {
   id: string;
@@ -35,14 +36,6 @@ interface AuthResponse {
   accessToken: string;
   refreshToken: string;
 }
-
-// API base URL including /api prefix — matches backend global prefix
-const _API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:4001`
-    : 'http://localhost:4001');
-const API_URL = `${_API_BASE}/api`;
 
 const AUTH_COOKIE = 'kpatrol_access_token';
 
