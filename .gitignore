@@ -73,3 +73,7 @@ storybook-static/
 data/
 *.db
 *.sqlite
+
+# Local-only assets
+.env.mqtt
+Prompts/

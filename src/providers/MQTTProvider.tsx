@@ -18,13 +18,12 @@ import {
   SafetyConfigCommand,
   NavStatus,
   NavMode,
-  RecorderStatus,
-  PatrolScript,
-  ScriptSummary,
-  ScriptListPayload,
-  ScriptStatusPayload,
-  ScriptCommand,
-  ScriptCommandAction,
+  GPSWaypoint,
+  GPSRouteAction,
+  GPSRouteCommand,
+  GPSStatusPayload,
+  BuzzerPattern,
+  LightPattern,
   SensorsData,
   CameraStatus,
   CameraCommand,
@@ -57,11 +56,12 @@ interface MQTTContextValue {
   imuData: IMUData | null;
   safetyEnabled: boolean;
 
-  // V5: Scripted patrol navigation
+  // V5.3: Autonomous navigation (5 modes)
   navStatus: NavStatus | null;
-  recorderStatus: RecorderStatus | null;
-  scripts: ScriptSummary[];
-  scriptStatus: ScriptStatusPayload | null;
+  gpsStatus: GPSStatusPayload | null;
+  gpsRoute: GPSWaypoint[];        // last route sent to robot
+  buzzerPattern: BuzzerPattern;   // last pattern requested
+  lightPattern: LightPattern;     // last pattern requested
 
   // Actions
   connect: () => void;
@@ -80,13 +80,11 @@ interface MQTTContextValue {
   setSafetyEnabled: (enabled: boolean) => void;
   toggleSafety: () => void;
 
-  // V5: Navigation + Script actions
+  // V5.3: Navigation actions
   sendNavCommand: (mode: NavMode | string, options?: Record<string, any>) => void;
-  sendScriptCommand: (
-    action: ScriptCommandAction,
-    options?: { name?: string; script?: PatrolScript },
-  ) => void;
-  refreshScripts: () => void;
+  sendGpsRoute: (action: GPSRouteAction, waypoints?: GPSWaypoint[], opts?: { loop?: boolean }) => void;
+  sendBuzzerPattern: (pattern: BuzzerPattern) => void;
+  sendLightPattern: (pattern: LightPattern) => void;
 
   // V10: AI Anomaly Detection
   detectionAlerts: DetectionAlert[];
@@ -132,11 +130,12 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
   const [imuData, setImuData] = useState<IMUData | null>(null);
   const [safetyEnabled, setSafetyEnabledState] = useState(true);
 
-  // V5: Scripted patrol state
+  // V5.3: Autonomous navigation state
   const [navStatus, setNavStatus] = useState<NavStatus | null>(null);
-  const [recorderStatus, setRecorderStatus] = useState<RecorderStatus | null>(null);
-  const [scripts, setScripts] = useState<ScriptSummary[]>([]);
-  const [scriptStatus, setScriptStatus] = useState<ScriptStatusPayload | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<GPSStatusPayload | null>(null);
+  const [gpsRoute, setGpsRoute] = useState<GPSWaypoint[]>([]);
+  const [buzzerPattern, setBuzzerPattern] = useState<BuzzerPattern>('OFF');
+  const [lightPattern, setLightPattern] = useState<LightPattern>('OFF');
 
   // Sensors, Camera, Markers states
   const [sensorsData, setSensorsData] = useState<SensorsData | null>(null);
@@ -227,12 +226,6 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
           timestamp: Date.now(),
         };
         client.publish(T.HEARTBEAT, JSON.stringify(heartbeat));
-
-        // Request initial script list
-        client.publish(
-          T.SCRIPT_COMMAND,
-          JSON.stringify({ action: 'list', timestamp: Date.now() }),
-        );
       });
 
       client.on('message', (topic: string, message: Buffer) => {
@@ -289,14 +282,11 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
     });
 
     // Reset per-robot caches
-    setScripts([]);
-    setScriptStatus(null);
-    setRecorderStatus(null);
     setNavStatus(null);
-    client.publish(
-      topicsRef.current.SCRIPT_COMMAND,
-      JSON.stringify({ action: 'list', timestamp: Date.now() }),
-    );
+    setGpsStatus(null);
+    setGpsRoute([]);
+    setBuzzerPattern('OFF');
+    setLightPattern('OFF');
 
     prevSerialRef.current = activeSerial;
   }, [activeSerial, isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -478,37 +468,19 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
         break;
       }
 
-      // V5: Navigation status (subtopic: nav_status) — carries recorder snapshot too
+      // V5.3: Navigation status — current mode + GPS waypoint progress
       case T.NAV_STATUS: {
         const ns = payload as NavStatus;
         setNavStatus(ns);
-        if (ns.recorder) setRecorderStatus(ns.recorder);
         break;
       }
 
-      // V5: Script library list
-      case T.SCRIPT_LIST: {
-        const lp = payload as ScriptListPayload;
-        if (Array.isArray(lp.scripts)) setScripts(lp.scripts);
-        break;
-      }
-
-      // V5: Script action acknowledgment (save/delete/load/start/stop/record_*)
-      case T.SCRIPT_STATUS: {
-        const ss = payload as ScriptStatusPayload;
-        setScriptStatus(ss);
-        // Mirror recorder status coming back from explicit record_status queries
-        if (ss.action === 'record_status') {
-          setRecorderStatus({
-            active:      !!ss.active,
-            name:        ss.name ?? null,
-            step_count:  ss.step_count ?? 0,
-            elapsed_s:   ss.elapsed_s ?? 0,
-            current_cmd: ss.current_cmd ?? null,
-          });
-        }
-        if (ss.action && ss.ok === false && ss.error) {
-          logAlert('error', `Script: ${ss.action}`, ss.error);
+      // V5.3: GPS route action acknowledgment (set/start/stop)
+      case T.GPS_STATUS: {
+        const gs = payload as GPSStatusPayload;
+        setGpsStatus(gs);
+        if (gs.action && gs.ok === false && gs.error) {
+          logAlert('error', `GPS route: ${gs.action}`, gs.error);
         }
         break;
       }
@@ -670,18 +642,40 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
   }, [publish]);
 
   // V5: Script command (library + recorder)
-  const sendScriptCommand = useCallback(
-    (action: ScriptCommandAction, options: { name?: string; script?: PatrolScript } = {}) => {
-      const cmd: ScriptCommand = { action, ...options, timestamp: Date.now() };
-      publish(topicsRef.current.SCRIPT_COMMAND, cmd);
-      console.log('[MQTT] Script command:', action, options);
+  // V5.3: GPS waypoint route — set / start / stop
+  const sendGpsRoute = useCallback(
+    (action: GPSRouteAction, waypoints?: GPSWaypoint[], opts: { loop?: boolean } = {}) => {
+      const cmd: GPSRouteCommand = { action, timestamp: Date.now() };
+      if (action === 'set' && waypoints) {
+        cmd.waypoints = waypoints;
+        cmd.loop = opts.loop ?? false;
+        setGpsRoute(waypoints);
+      }
+      publish(topicsRef.current.GPS_ROUTE, cmd);
+      console.log('[MQTT] GPS route command:', action, waypoints?.length ?? 0, 'wp');
     },
     [publish],
   );
 
-  const refreshScripts = useCallback(() => {
-    sendScriptCommand('list');
-  }, [sendScriptCommand]);
+  // V5.3: Buzzer pattern (firmware non-blocking state machine)
+  const sendBuzzerPattern = useCallback(
+    (pattern: BuzzerPattern) => {
+      publish(topicsRef.current.BUZZ, { pattern, timestamp: Date.now() });
+      setBuzzerPattern(pattern);
+      console.log('[MQTT] Buzzer pattern:', pattern);
+    },
+    [publish],
+  );
+
+  // V5.3: Light pattern (firmware non-blocking state machine)
+  const sendLightPattern = useCallback(
+    (pattern: LightPattern) => {
+      publish(topicsRef.current.LIGHT_PATTERN, { pattern, timestamp: Date.now() });
+      setLightPattern(pattern);
+      console.log('[MQTT] Light pattern:', pattern);
+    },
+    [publish],
+  );
 
   // V10: Clear detection alerts
   const clearDetectionAlerts = useCallback(() => {
@@ -743,11 +737,12 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
     safetyStatus,
     imuData,
     safetyEnabled,
-    // V5: Nav + Script state
+    // V5.3: Nav + GPS + Buzzer + Light state
     navStatus,
-    recorderStatus,
-    scripts,
-    scriptStatus,
+    gpsStatus,
+    gpsRoute,
+    buzzerPattern,
+    lightPattern,
     // Actions
     connect,
     disconnect,
@@ -763,10 +758,11 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
     // V3: Safety controls
     setSafetyEnabled,
     toggleSafety,
-    // V5: Nav + Script actions
+    // V5.3: Nav + GPS + Buzzer + Light actions
     sendNavCommand,
-    sendScriptCommand,
-    refreshScripts,
+    sendGpsRoute,
+    sendBuzzerPattern,
+    sendLightPattern,
     // Camera
     sendCameraCommand,
     // Sensor + camera + marker states

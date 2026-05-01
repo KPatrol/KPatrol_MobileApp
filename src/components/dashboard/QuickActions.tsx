@@ -3,8 +3,8 @@
 import {
   RotateCcw,
   AlertTriangle,
-  Play,
   Pause,
+  Radio,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMQTT } from '@/providers/MQTTProvider';
@@ -39,31 +39,32 @@ function ActionButton({ icon, label, onClick, variant = 'default', disabled }: A
 export function QuickActions() {
   const {
     sendNavCommand,
-    sendScriptCommand,
+    sendGpsRoute,
     emergencyStop,
     isRobotOnline,
     navStatus,
   } = useMQTT();
 
-  const isPatrolling = navStatus?.state === 'running' || navStatus?.mode === 'SCRIPT_PATROL';
+  const mode = navStatus?.mode;
+  const isAuto = mode === 'AUTO_FREE_COVERAGE' || mode === 'AUTO_LINE_FOLLOW' || mode === 'AUTO_GPS_WAYPOINT';
 
   return (
     <div className="grid grid-cols-2 gap-3">
       <ActionButton
-        icon={<Play className="w-6 h-6" />}
-        label="Tiếp tục script"
-        onClick={() => sendScriptCommand('start')}
+        icon={<Radio className="w-6 h-6" />}
+        label="Chế độ Thủ công"
+        onClick={() => sendNavCommand('manual')}
         variant="success"
-        disabled={!isRobotOnline || isPatrolling}
+        disabled={!isRobotOnline}
       />
       <ActionButton
         icon={<Pause className="w-6 h-6" />}
-        label="Dừng patrol"
+        label="Dừng auto"
         onClick={() => {
-          sendScriptCommand('stop');
-          sendNavCommand('MANUAL');
+          if (mode === 'AUTO_GPS_WAYPOINT') sendGpsRoute('stop');
+          sendNavCommand('manual');
         }}
-        disabled={!isRobotOnline}
+        disabled={!isRobotOnline || !isAuto}
       />
       <ActionButton
         icon={<AlertTriangle className="w-6 h-6" />}
@@ -75,8 +76,8 @@ export function QuickActions() {
       <ActionButton
         icon={<RotateCcw className="w-6 h-6" />}
         label="Clear khẩn"
-        onClick={() => sendNavCommand('MANUAL', { action: 'clear_emergency' })}
-        disabled={!isRobotOnline}
+        onClick={() => sendNavCommand('clear_emergency')}
+        disabled={!isRobotOnline || mode !== 'EMERGENCY'}
       />
     </div>
   );

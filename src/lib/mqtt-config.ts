@@ -74,12 +74,13 @@ export function getTopics(serial: string) {
     SAFETY_CONFIG: `${p}/safety_config`,
     IMU:           `${p}/imu`,
 
-    // V5: Scripted Patrol Navigation
+    // V5.3: Autonomous Navigation (5 modes)
     NAV_COMMAND:   `${p}/nav_command`,
     NAV_STATUS:    `${p}/nav_status`,
-    SCRIPT_COMMAND: `${p}/script_command`,
-    SCRIPT_LIST:    `${p}/script_list`,
-    SCRIPT_STATUS:  `${p}/script_status`,
+    GPS_ROUTE:     `${p}/gps_route`,
+    GPS_STATUS:    `${p}/gps_status`,
+    BUZZ:          `${p}/buzzer`,
+    LIGHT_PATTERN: `${p}/light_pattern`,
 
     // V7: ArUco Markers (camera-stream → Pi)
     MARKERS:       `${p}/markers`,
@@ -124,120 +125,71 @@ export const MQTT_TOPICS = getTopics(
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_ROBOT_SERIAL) || 'KPATROL-001'
 );
 
-// V5: Scripted Patrol — 3 modes only
-export type NavMode = 'MANUAL' | 'SCRIPT_PATROL' | 'EMERGENCY';
+// V5.3: Autonomous Navigation — 5 modes (MANUAL + 3 AUTO + EMERGENCY)
+export type NavMode =
+  | 'MANUAL'
+  | 'AUTO_FREE_COVERAGE'
+  | 'AUTO_LINE_FOLLOW'
+  | 'AUTO_GPS_WAYPOINT'
+  | 'EMERGENCY';
 
-// V5: Recorder state (Pi-side capture of manual driving)
-export interface RecorderStatus {
-  active: boolean;
-  name: string | null;
-  step_count: number;
-  elapsed_s: number;
-  current_cmd: string | null;
-}
-
-// V5: Navigation status from robot (executor + recorder)
+// V5.3: Navigation status from robot
 export interface NavStatus {
   mode: NavMode;
   speed?: number;                    // Nav speed percent (0-100)
-  active_script?: string | null;     // Currently loaded script name
-  recorder?: RecorderStatus;         // Live recorder snapshot
-  // Executor fields (only present in SCRIPT_PATROL)
   state?: 'idle' | 'running' | 'paused' | 'emergency' | 'done';
-  step_idx?: number;
-  step_total?: number;
-  step_op?: string;
-  step_progress?: number;            // 0..1
+  // GPS waypoint progress (only present in AUTO_GPS_WAYPOINT)
+  current_waypoint?: number;
+  total_waypoints?: number;
+  distance_remaining_m?: number;
+  bearing_deg?: number;
   error?: string;
   timestamp?: number;
 }
 
-// V5: Script primitive step (matches Pi ScriptStep dataclass — field is "op" NOT "type")
-export type ScriptOp =
-  | 'rotate'
-  | 'rotate_to'
-  | 'forward_time'
-  | 'backward_time'
-  | 'strafe_time'
-  | 'forward_until'
-  | 'strafe_until'
-  | 'move_distance'
-  | 'arc'
-  | 'path'
-  | 'pause';
-
-export type MoveDirection = 'forward' | 'backward' | 'left' | 'right';
-
-export interface Waypoint {
-  x: number;   // metres, path-local frame (+x = forward at start)
-  y: number;   // metres, path-local frame (+y = left)
+// V5.3: GPS Waypoint definitions
+export interface GPSWaypoint {
+  lat: number;
+  lon: number;
+  radius_m?: number;     // arrival radius (default 3 m)
+  speed_pct?: number;    // optional per-waypoint speed override
+  label?: string;
 }
 
-export interface ScriptStep {
-  op: ScriptOp;
-  angle_deg?: number;                // rotate: |angle| 0..180 ; arc: signed
-  direction?: 'left' | 'right' | MoveDirection;
-  duration_s?: number;               // *_time + pause
-  speed_pct?: number;                // 0..100
-  tof_min_cm?: number;               // *_until
-  tof_sensor?: string;               // *_until sensor name
-  timeout_s?: number;                // *_until
-  // New v6 fields (metric + path)
-  distance_m?: number;               // move_distance / arc
-  heading_deg?: number;              // rotate_to (relative to script-start yaw)
-  radius_m?: number;                 // arc (optional, for UI)
-  waypoints?: Waypoint[];            // path primitive
-}
+export type GPSRouteAction = 'set' | 'start' | 'stop';
 
-export interface PatrolScript {
-  name: string;
-  steps: ScriptStep[];
+export interface GPSRouteCommand {
+  action: GPSRouteAction;
+  waypoints?: GPSWaypoint[];   // required when action === 'set'
   loop?: boolean;
-  default_speed_pct?: number;
+  timestamp?: number;
 }
 
-export interface ScriptSummary {
-  name: string;
-  steps: number;
-  loop: boolean;
-  default_speed_pct: number;
-}
-
-export interface ScriptListPayload {
-  scripts: ScriptSummary[];
-  timestamp: number;
-}
-
-export interface ScriptStatusPayload {
+export interface GPSStatusPayload {
   ok?: boolean;
   action?: string;
-  name?: string;
-  steps?: number;
-  path?: string;
+  count?: number;
+  state?: string;
   error?: string;
-  // Recorder status when action === 'record_status'
-  active?: boolean;
-  step_count?: number;
-  elapsed_s?: number;
-  current_cmd?: string | null;
+  timestamp?: number;
 }
 
-export type ScriptCommandAction =
-  | 'list'
-  | 'save'
-  | 'delete'
-  | 'load'
-  | 'start'
-  | 'stop'
-  | 'record_start'
-  | 'record_stop'
-  | 'record_cancel'
-  | 'record_status';
+// V5.3: Buzzer + Light patterns (firmware-side state machines)
+export type BuzzerPattern = 'OFF' | 'ON' | 'BEEP' | 'ALARM' | 'SOS';
+export type LightPattern  =
+  | 'OFF'
+  | 'WARN_BLINK'
+  | 'WARN_STROBE'
+  | 'BOTH_BLINK'
+  | 'SOS';
 
-export interface ScriptCommand {
-  action: ScriptCommandAction;
-  name?: string;
-  script?: PatrolScript;
+export interface BuzzerCommand {
+  pattern: BuzzerPattern;
+  timestamp?: number;
+}
+
+export interface LightPatternCommand {
+  pattern: LightPattern;
   timestamp?: number;
 }
 

@@ -108,11 +108,15 @@ export function ControlView() {
         <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-kpatrol-500/15 via-cyan-500/10 to-transparent ring-1 ring-kpatrol-500/30">
           <Navigation className="w-3.5 h-3.5 text-kpatrol-300 animate-pulse" />
           <span className="text-xs font-semibold text-kpatrol-200">
-            {navMode === 'SCRIPT_PATROL' ? 'Đang tuần tra theo kịch bản' : navMode === 'EMERGENCY' ? 'Dừng khẩn cấp' : navMode}
+            {navMode === 'AUTO_GPS_WAYPOINT' ? 'GPS waypoint'
+              : navMode === 'AUTO_LINE_FOLLOW' ? 'Bám line'
+              : navMode === 'AUTO_FREE_COVERAGE' ? 'Phủ vùng'
+              : navMode === 'EMERGENCY' ? 'Dừng khẩn cấp'
+              : navMode}
           </span>
-          {navStatus?.step_progress !== undefined && (
+          {navMode === 'AUTO_GPS_WAYPOINT' && navStatus?.distance_remaining_m !== undefined && (
             <span className="text-[10px] text-kpatrol-300 font-mono ml-auto">
-              {Math.round(navStatus.step_progress * 100)}%
+              {navStatus.distance_remaining_m.toFixed(1)}m
             </span>
           )}
           <button
@@ -774,10 +778,10 @@ function ActionsRail({
   const buttons: Btn[] = [
     {
       key: 'patrol',
-      label: 'Tuần tra',
+      label: 'Phủ vùng',
       icon: <Navigation className="w-5 h-5" />,
-      active: navMode === 'SCRIPT_PATROL',
-      onClick: () => onNavMode(navMode === 'SCRIPT_PATROL' ? 'MANUAL' : 'SCRIPT_PATROL'),
+      active: navMode === 'AUTO_FREE_COVERAGE',
+      onClick: () => onNavMode(navMode === 'AUTO_FREE_COVERAGE' ? 'MANUAL' : 'AUTO_FREE_COVERAGE'),
       activeColor: 'text-cyan-300',
       activeBg: 'bg-gradient-to-br from-cyan-500/30 to-kpatrol-500/20 ring-cyan-500/50 shadow-[0_0_14px_rgba(34,211,238,0.45)]',
     },
