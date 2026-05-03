@@ -71,7 +71,7 @@ export function PatrolRouteView() {
   const gpsTone = !gpsOk ? 'red' : sats >= 4 ? 'emerald' : 'amber';
 
   return (
-    <div className="h-full flex flex-col gap-3 md:gap-4 min-h-0">
+    <div className="md:h-full flex flex-col gap-3 md:gap-4 md:min-h-0">
       {/* HUD Header */}
       <div className="relative shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-cyan-500/30 backdrop-blur-sm shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
@@ -118,7 +118,7 @@ export function PatrolRouteView() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 md:gap-4">
+      <div className="lg:flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 md:gap-4">
         {/* Map */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-cyan-500/30 backdrop-blur-sm shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-col min-h-[280px]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-10" />

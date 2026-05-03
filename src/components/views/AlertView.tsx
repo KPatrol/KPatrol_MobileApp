@@ -95,7 +95,7 @@ export function AlertView() {
   }, [detectionAlerts, filter]);
 
   return (
-    <div className="h-full flex flex-col gap-3 md:gap-4 min-h-0">
+    <div className="md:h-full flex flex-col gap-3 md:gap-4 md:min-h-0">
       {/* HUD Header */}
       <div className="relative shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-red-500/30 backdrop-blur-sm shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-400/50 to-transparent" />
@@ -161,7 +161,7 @@ export function AlertView() {
       </div>
 
       {/* Feed (inner scroll) */}
-      <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+      <div className="min-h-[400px] md:flex-1 md:min-h-0 md:overflow-y-auto -mx-1 px-1">
         {filtered.length === 0 ? (
           <div className="h-full rounded-3xl ring-1 ring-dashed ring-slate-700/50 bg-gradient-to-br from-slate-900/60 via-slate-900/30 to-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-6">
             <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/30 flex items-center justify-center shadow-[0_0_22px_rgba(74,222,128,0.25)]">

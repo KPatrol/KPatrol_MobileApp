@@ -152,7 +152,7 @@ export function HistoryView() {
   };
 
   return (
-    <div className="h-full flex flex-col gap-3 md:gap-4 min-h-0">
+    <div className="md:h-full flex flex-col gap-3 md:gap-4 md:min-h-0">
       {/* HUD Header */}
       <div className="relative shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-cyan-500/30 backdrop-blur-sm shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
@@ -252,7 +252,7 @@ export function HistoryView() {
       </div>
 
       {/* Timeline */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-slate-700/40 backdrop-blur-sm flex-1 min-h-0 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-slate-700/40 backdrop-blur-sm min-h-[400px] md:flex-1 md:min-h-0 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent" />
         <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-800/60">
           {filteredItems.length === 0 ? (

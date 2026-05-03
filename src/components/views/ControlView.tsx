@@ -80,7 +80,7 @@ export function ControlView() {
   const navActive = navMode !== 'MANUAL';
 
   return (
-    <div className="h-full flex flex-col gap-2 md:gap-3 min-h-0">
+    <div className="md:h-full flex flex-col gap-2 md:gap-3 md:min-h-0">
       {/* ──────────── COCKPIT HEADER ──────────── */}
       <CockpitHeader
         isDev={isDev}
@@ -129,10 +129,10 @@ export function ControlView() {
       )}
 
       {/* ──────────── MAIN GRID: Power Ring | Side Rail ──────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(400px,1fr)] gap-3 md:gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(400px,1fr)] gap-3 md:gap-4 lg:flex-1 lg:min-h-0">
 
         {/* ── LEFT: Cockpit center stage ── */}
-        <div className="flex flex-col gap-3 min-h-0">
+        <div className="flex flex-col gap-3 lg:min-h-0">
           <PowerRingControl
             controlMode={controlMode}
             onModeChange={setControlMode}
@@ -146,7 +146,7 @@ export function ControlView() {
         </div>
 
         {/* ── RIGHT: HUD rail — balanced with flex-1 distribution ── */}
-        <div className="flex flex-col gap-3 min-h-0">
+        <div className="flex flex-col gap-3 lg:min-h-0">
           <AttitudeHUD />
           <DirectionalSafetyMini />
           <ActionsRail
@@ -299,7 +299,7 @@ function PowerRingControl({
   const speedDash = (speedLevel / 100) * trackDash;
 
   return (
-    <div className="relative flex-1 min-h-0 rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-kpatrol-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
+    <div className="relative min-h-[520px] lg:flex-1 lg:min-h-0 rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-kpatrol-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
       {/* Ambient glow — pulses with joystick intensity */}
       <div
         className="absolute inset-0 pointer-events-none transition-opacity duration-300"

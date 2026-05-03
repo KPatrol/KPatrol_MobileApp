@@ -281,12 +281,16 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
       else console.log(`[MQTT] Re-subscribed to ${newWildcard}`);
     });
 
-    // Reset per-robot caches
+    // Reset per-robot caches — UI state must clear on robot switch so we don't
+    // render stale ON/OFF from the previous robot before its first STATUS arrives.
     setNavStatus(null);
     setGpsStatus(null);
     setGpsRoute([]);
     setBuzzerPattern('OFF');
     setLightPattern('OFF');
+    setLightState(false);
+    setMainLightState(false);
+    setRobotStatus(null);
 
     prevSerialRef.current = activeSerial;
   }, [activeSerial, isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -597,10 +601,11 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
   }, [publish]);
 
   // Light control - Warning Light (Đèn cảnh báo)
+  // No optimistic UI update — trust STATUS topic for actual state, otherwise
+  // a failed publish or hardware fault leaves the button stuck ON.
   const setLight = useCallback((state: boolean) => {
     const command = state ? 'LIGHT_ON' : 'LIGHT_OFF';
     publish(topicsRef.current.LIGHT, { type: command, timestamp: Date.now() });
-    setLightState(state);
     console.log('[MQTT] Warning Light command sent:', command);
   }, [publish]);
 
@@ -614,7 +619,6 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
   const setMainLight = useCallback((state: boolean) => {
     const command = state ? 'MAIN_ON' : 'MAIN_OFF';
     publish(topicsRef.current.MAIN_LIGHT, { type: command, timestamp: Date.now() });
-    setMainLightState(state);
     console.log('[MQTT] Main Light command sent:', command);
   }, [publish]);
 

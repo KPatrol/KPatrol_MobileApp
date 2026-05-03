@@ -67,7 +67,7 @@ export function DashboardView() {
   const dataReady = mqttConnected && isRobotOnline && robotStatus != null;
 
   return (
-    <div className="h-full flex flex-col gap-3 md:gap-4 min-h-0">
+    <div className="md:h-full flex flex-col gap-3 md:gap-4 md:min-h-0">
       <ConnectionBar
         mqttConnected={mqttConnected}
         isRobotOnline={isRobotOnline}
@@ -133,7 +133,7 @@ export function DashboardView() {
       </div>
 
       {/* Main canvas */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)] gap-3 md:gap-4">
+      <div className="lg:flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)] gap-3 md:gap-4">
         {/* Live map — HUD card */}
         <div className="relative rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-kpatrol-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col min-h-[260px]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent z-[401]" />
@@ -180,7 +180,7 @@ export function DashboardView() {
         </div>
 
         {/* Side panel */}
-        <div className="flex flex-col gap-3 md:gap-4 min-h-0">
+        <div className="flex flex-col gap-3 md:gap-4 lg:min-h-0">
           <div className="shrink-0 rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-accent-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden">
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent-400/40 to-transparent" />
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700/40 bg-slate-900/60">
@@ -194,7 +194,7 @@ export function DashboardView() {
             </div>
           </div>
 
-          <div className="rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-amber-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-col min-h-0 flex-1 overflow-hidden">
+          <div className="rounded-3xl bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-slate-950/90 border border-amber-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-col min-h-[300px] lg:min-h-0 lg:flex-1 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/40 bg-slate-900/60 shrink-0">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />

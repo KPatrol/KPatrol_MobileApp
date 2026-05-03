@@ -85,7 +85,7 @@ export default function Home() {
           title={getViewTitle(currentView)}
         />
         
-        <main className="flex-1 overflow-hidden p-3 md:p-4 lg:p-6 min-h-0">
+        <main className="flex-1 overflow-y-auto md:overflow-hidden p-3 md:p-4 lg:p-6 min-h-0">
           {renderView()}
         </main>
       </div>

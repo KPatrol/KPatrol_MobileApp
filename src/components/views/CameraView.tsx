@@ -225,7 +225,7 @@ export function CameraView() {
     <div
       ref={containerRef}
       className={cn(
-        'h-full flex flex-col gap-3 md:gap-4 min-h-0',
+        'md:h-full flex flex-col gap-3 md:gap-4 md:min-h-0',
         isFullscreen && 'fixed inset-0 z-50 bg-slate-950 p-4'
       )}
     >

@@ -11,7 +11,7 @@ export function PatrolView() {
   const [tab, setTab] = useState<Tab>('route');
 
   return (
-    <div className="h-full flex flex-col gap-3 md:gap-4 min-h-0">
+    <div className="md:h-full flex flex-col gap-3 md:gap-4 md:min-h-0">
       <div className="relative inline-flex p-1 rounded-2xl bg-slate-900/80 backdrop-blur-sm ring-1 ring-cyan-500/30 shadow-[0_0_18px_rgba(34,211,238,0.15)] shrink-0 self-start overflow-hidden">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent pointer-events-none" />
         <button
@@ -38,7 +38,7 @@ export function PatrolView() {
         </button>
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="min-h-[600px] md:flex-1 md:min-h-0">
         {tab === 'route' ? <PatrolRouteView /> : <PatrolPanel />}
       </div>
     </div>
