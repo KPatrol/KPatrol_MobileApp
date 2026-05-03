@@ -50,7 +50,7 @@ export default function LoginPage() {
     const result = await login({ email, password, rememberMe });
 
     if (result.success) {
-      router.push('/');
+      router.push('/robots');
     } else {
       setError(result.error || 'Đăng nhập thất bại');
     }

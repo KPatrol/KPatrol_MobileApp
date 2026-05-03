@@ -29,7 +29,7 @@ import {
   QUICK_ACTION_TONES,
 } from '@/lib/quick-actions';
 import { cn, formatDuration, sanitizeUptime } from '@/lib/utils';
-import { useRobotStore } from '@/store/robotStore';
+import { useRobotStore, type QuickActionId } from '@/store/robotStore';
 
 type ViewType = 'dashboard' | 'control' | 'camera' | 'patrol' | 'alerts' | 'history' | 'settings';
 
@@ -78,20 +78,76 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
     { id: 'settings', label: 'Cài đặt', icon: Settings, badge: null },
   ];
 
+  // Hardware-backed actions read their "active" state from MQTT, not local config.active —
+  // otherwise the UI lies after a failed publish or robot-side override.
+  const isQuickActionActive = (id: QuickActionId, configActive: boolean): boolean => {
+    switch (id) {
+      case 'mainLight':
+        return mqtt.mainLightState;
+      case 'warningLight':
+        return mqtt.lightState;
+      case 'autoPatrol': {
+        const mode = mqtt.navStatus?.mode;
+        return mode != null && mode !== 'MANUAL' && mode !== 'EMERGENCY';
+      }
+      default:
+        return configActive;
+    }
+  };
+
+  // Dispatch the matching MQTT command for this action. UI-only flags (lockControls,
+  // nightMode, recordSession) just keep their store state — no hardware target yet.
+  const dispatchQuickAction = (id: QuickActionId, willBeActive: boolean) => {
+    switch (id) {
+      case 'mainLight':
+        mqtt.setMainLight(willBeActive);
+        break;
+      case 'warningLight':
+        mqtt.setLight(willBeActive);
+        break;
+      case 'autoPatrol':
+        mqtt.sendNavCommand(willBeActive ? 'AUTO_FREE_COVERAGE' : 'MANUAL');
+        break;
+      case 'ecoMode':
+        mqtt.setSpeed(willBeActive ? 40 : 80);
+        break;
+      case 'silentMode':
+        mqtt.sendBuzzerPattern(willBeActive ? 'OFF' : 'ON');
+        break;
+      case 'recordSession':
+        if (willBeActive) mqtt.sendCameraCommand('snapshot');
+        break;
+      case 'nightMode':
+      case 'lockControls':
+        break;
+    }
+  };
+
   const enabledQuickActions = useMemo(
     () =>
       (store.settings.quickActions ?? [])
         .filter((qa) => qa.enabled)
-        .map((qa) => ({ config: qa, def: QUICK_ACTION_BY_ID[qa.id] }))
-        .filter((entry) => Boolean(entry.def)),
-    [store.settings.quickActions]
+        .map((qa) => {
+          const def = QUICK_ACTION_BY_ID[qa.id];
+          if (!def) return null;
+          return {
+            config: qa,
+            def,
+            active: isQuickActionActive(qa.id, qa.active),
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store.settings.quickActions, mqtt.mainLightState, mqtt.lightState, mqtt.navStatus?.mode]
   );
 
-  const handleToggleQuickAction = (id: string) => {
-    const next = (store.settings.quickActions ?? []).map((qa) =>
-      qa.id === id ? { ...qa, active: !qa.active } : qa
+  const handleToggleQuickAction = (id: QuickActionId, currentActive: boolean) => {
+    const next = !currentActive;
+    dispatchQuickAction(id, next);
+    const updated = (store.settings.quickActions ?? []).map((qa) =>
+      qa.id === id ? { ...qa, active: next } : qa
     );
-    store.updateSettings({ quickActions: next });
+    store.updateSettings({ quickActions: updated });
   };
 
   return (
@@ -252,15 +308,15 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
               </button>
             ) : (
               <div className="space-y-1">
-                {enabledQuickActions.map(({ config, def }) => {
+                {enabledQuickActions.map(({ config, def, active }) => {
                   const tone = QUICK_ACTION_TONES[def.tone];
                   return (
                     <button
                       key={config.id}
-                      onClick={() => handleToggleQuickAction(config.id)}
+                      onClick={() => handleToggleQuickAction(config.id, active)}
                       className={cn(
                         'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg ring-1 transition-all',
-                        config.active
+                        active
                           ? `${tone.bg} ${tone.ring} ${tone.glow}`
                           : 'bg-slate-900/40 ring-cyan-500/10 hover:ring-cyan-400/35 hover:bg-slate-900/70'
                       )}
@@ -268,7 +324,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
                       <span
                         className={cn(
                           'flex items-center justify-center w-8 h-8 rounded-md ring-1 transition-all',
-                          config.active
+                          active
                             ? `${tone.iconBg} ${tone.ring}`
                             : 'bg-slate-900/60 ring-cyan-500/15'
                         )}
@@ -276,14 +332,14 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
                         <def.icon
                           className={cn(
                             'w-4 h-4',
-                            config.active ? tone.text : 'text-slate-500'
+                            active ? tone.text : 'text-slate-500'
                           )}
                         />
                       </span>
                       <span
                         className={cn(
                           'text-sm font-bold flex-1 text-left tracking-tight',
-                          config.active ? 'text-white' : 'text-slate-400'
+                          active ? 'text-white' : 'text-slate-400'
                         )}
                       >
                         {def.label}
@@ -291,7 +347,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
                       <span
                         className={cn(
                           'relative w-9 h-5 rounded-full transition-colors ring-1',
-                          config.active
+                          active
                             ? `${tone.bg} ${tone.ring}`
                             : 'bg-slate-800 ring-slate-700/60'
                         )}
@@ -299,7 +355,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
                         <span
                           className={cn(
                             'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all shadow-sm',
-                            config.active ? 'left-[18px]' : 'left-0.5'
+                            active ? 'left-[18px]' : 'left-0.5'
                           )}
                         />
                       </span>

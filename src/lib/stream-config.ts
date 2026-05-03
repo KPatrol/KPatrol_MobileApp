@@ -42,14 +42,29 @@ export interface StreamStatus {
   info: StreamInfo | null;
 }
 
-// Helper to check if stream is available
-export async function checkStreamHealth(): Promise<boolean> {
+// Default timeout — Pi or Cloudflare tunnel could hang on a half-open TCP, so
+// abort manually instead of relying on the browser's default (which is none).
+const STREAM_FETCH_TIMEOUT_MS = 4000;
+
+async function fetchWithTimeout(url: string, timeoutMs: number = STREAM_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(STREAM_CONFIG.streamApiUrl, {
+    return await fetch(url, {
       method: 'GET',
       mode: 'cors',
       cache: 'no-cache',
+      signal: controller.signal,
     });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Helper to check if stream is available
+export async function checkStreamHealth(): Promise<boolean> {
+  try {
+    const response = await fetchWithTimeout(STREAM_CONFIG.streamApiUrl);
     return response.ok;
   } catch {
     return false;
@@ -59,13 +74,9 @@ export async function checkStreamHealth(): Promise<boolean> {
 // Helper to get stream info
 export async function getStreamInfo(): Promise<StreamInfo | null> {
   try {
-    const response = await fetch(STREAM_CONFIG.streamApiUrl, {
-      method: 'GET',
-      mode: 'cors',
-      cache: 'no-cache',
-    });
+    const response = await fetchWithTimeout(STREAM_CONFIG.streamApiUrl);
     if (response.ok) {
-      return await response.json();
+      return (await response.json()) as StreamInfo;
     }
     return null;
   } catch {

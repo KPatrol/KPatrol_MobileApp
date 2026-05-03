@@ -1,12 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bot, Plus, Wifi, Battery, Clock, ChevronRight, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { useRobotContext } from '@/providers/RobotProvider';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { Robot, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+// A robot is "online" if backend received a heartbeat within this window.
+// Pi heartbeat interval = 5s; we allow 2 missed beats + slack.
+const ONLINE_THRESHOLD_MS = 15_000;
+
+function isRobotLive(robot: Robot, now: number): boolean {
+  if (!robot.lastSeen) return false;
+  const lastSeenMs = new Date(robot.lastSeen).getTime();
+  if (Number.isNaN(lastSeenMs)) return false;
+  return now - lastSeenMs < ONLINE_THRESHOLD_MS;
+}
 
 export default function RobotsPage() {
   const router = useRouter();
@@ -20,6 +31,14 @@ export default function RobotsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Tick clock + auto-refresh robot list so online status stays fresh.
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 3000);
+    const refresh = setInterval(() => refreshRobots(), 5000);
+    return () => { clearInterval(tick); clearInterval(refresh); };
+  }, [refreshRobots]);
 
   const handleSelect = (robot: Robot) => {
     selectRobot(robot);
@@ -56,13 +75,10 @@ export default function RobotsPage() {
     setDeletingId(null);
   };
 
-  const statusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'online': return 'text-green-400';
-      case 'offline': return 'text-gray-500';
-      case 'error': return 'text-red-400';
-      default: return 'text-yellow-400';
-    }
+  const statusColor = (live: boolean, raw?: string) => {
+    if (live) return 'text-green-400';
+    if (raw?.toLowerCase() === 'error') return 'text-red-400';
+    return 'text-gray-500';
   };
 
   return (
@@ -105,7 +121,9 @@ export default function RobotsPage() {
           </div>
         ) : (
           <div className="space-y-3 mb-6">
-            {robots.map((robot) => (
+            {robots.map((robot) => {
+              const live = isRobotLive(robot, now);
+              return (
               <div
                 key={robot.id}
                 className={cn(
@@ -120,16 +138,19 @@ export default function RobotsPage() {
                   className="w-full p-4 flex items-center gap-4 text-left"
                 >
                   {/* Icon */}
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 relative">
                     <Bot className="w-6 h-6 text-primary" />
+                    {live && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 ring-2 ring-dark-surface animate-pulse" />
+                    )}
                   </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-white font-medium truncate">{robot.name}</span>
-                      <span className={cn('text-xs font-medium', statusColor(robot.status))}>
-                        ● {robot.status ?? 'unknown'}
+                      <span className={cn('text-xs font-medium', statusColor(live, robot.status))}>
+                        ● {live ? 'online' : (robot.status ?? 'offline')}
                       </span>
                     </div>
                     <p className="text-dark-muted text-xs mt-0.5 font-mono">{robot.serialNumber}</p>
@@ -172,7 +193,8 @@ export default function RobotsPage() {
                   )}
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

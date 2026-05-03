@@ -606,7 +606,8 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
 
   const toggleLight = useCallback(() => {
     publish(topicsRef.current.LIGHT, { type: 'LIGHT_T', timestamp: Date.now() });
-    setLightState(prev => !prev);
+    // Trust STATUS topic for actual light state — don't optimistically toggle
+    // (firmware may reject the command if hardware is in fault, etc.)
     console.log('[MQTT] Warning Light toggle sent: LIGHT_T');
   }, [publish]);
 
@@ -619,21 +620,33 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
 
   const toggleMainLight = useCallback(() => {
     publish(topicsRef.current.MAIN_LIGHT, { type: 'MAIN_T', timestamp: Date.now() });
-    setMainLightState(prev => !prev);
+    // Trust STATUS topic for actual light state.
     console.log('[MQTT] Main Light toggle sent: MAIN_T');
   }, [publish]);
 
   // V3: Safety control
+  const safetyEnabledRef = useRef(safetyEnabled);
+  useEffect(() => { safetyEnabledRef.current = safetyEnabled; }, [safetyEnabled]);
+  const safetyToggleLockRef = useRef(false);
+
   const setSafetyEnabled = useCallback((enabled: boolean) => {
     const command: SafetyConfigCommand = { enabled, timestamp: Date.now() };
     publish(topicsRef.current.SAFETY_CONFIG, command);
     setSafetyEnabledState(enabled);
+    safetyEnabledRef.current = enabled;
     console.log('[MQTT] Safety config sent:', enabled ? 'ENABLED' : 'DISABLED');
   }, [publish]);
 
   const toggleSafety = useCallback(() => {
-    setSafetyEnabled(!safetyEnabled);
-  }, [setSafetyEnabled, safetyEnabled]);
+    // In-flight guard: ignore rapid double-clicks that race the firmware ACK.
+    if (safetyToggleLockRef.current) {
+      console.log('[MQTT] Safety toggle ignored — in-flight');
+      return;
+    }
+    safetyToggleLockRef.current = true;
+    setSafetyEnabled(!safetyEnabledRef.current);
+    setTimeout(() => { safetyToggleLockRef.current = false; }, 400);
+  }, [setSafetyEnabled]);
 
   // V5: Navigation command (mode switch + clear_emergency)
   const sendNavCommand = useCallback((mode: NavMode | string, options: Record<string, any> = {}) => {

@@ -363,23 +363,31 @@ const DIR_LABELS: { key: keyof DirectionSafetyBarProps['directions']; label: str
 
 function DirectionSafetyBar({ directions }: DirectionSafetyBarProps) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[9px] text-slate-500 uppercase tracking-wider mr-1">Dir</span>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
       {DIR_LABELS.map(({ key, label, icon }) => {
         const dir = directions[key];
         const blocked = dir.blocked;
+        const danger = dir.zone === 'danger';
         const zs = Z[dir.zone];
+        const distM = (dir.distance / 1000).toFixed(2);
+        const ringClass = blocked
+          ? 'bg-red-500/25 border-red-500/70 text-red-200 shadow-[0_0_12px_rgba(239,68,68,0.5)] animate-pulse'
+          : danger
+          ? 'bg-red-500/15 border-red-500/40 text-red-300'
+          : `${zs.bg} ${zs.border} ${zs.text}`;
         return (
-          <div key={key}
-            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold tracking-wider transition-all ${
-              blocked
-                ? 'bg-red-500/15 border-red-500/40 text-red-400'
-                : `${zs.bg} ${zs.border} ${zs.text}`
-            }`}
+          <div
+            key={key}
+            className={`flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg border transition-all ${ringClass}`}
             title={`${label}: ${dir.distance}mm — ${dir.zone}${blocked ? ' (BLOCKED)' : ''}`}
           >
-            <span className="text-xs">{icon}</span>
-            <span>{blocked ? 'BLOCK' : label}</span>
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-base leading-none">{icon}</span>
+              <span className="text-[10px] font-bold tracking-wider">{blocked ? 'BLOCK' : label}</span>
+            </div>
+            <span className="text-[11px] font-mono tabular-nums font-bold whitespace-nowrap">
+              {distM}<span className="opacity-70 text-[9px] ml-0.5">m</span>
+            </span>
           </div>
         );
       })}

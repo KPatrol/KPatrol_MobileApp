@@ -77,49 +77,16 @@ export function CameraView() {
     }
   }, [isConnected]);
 
-  const connectStream = useCallback(async () => {
+  const connectStream = useCallback(() => {
     setIsLoading(true);
     setStreamError(null);
+    setStreamKey(Date.now());
+    setIsConnected(true);
 
-    try {
-      const isHealthy = await checkStreamHealth();
-
-      if (!isHealthy) {
-        setUseLocalStream(true);
-        setStreamError('Đang thử kết nối local...');
-
-        try {
-          const localResponse = await fetch(STREAM_CONFIG.localApiUrl, {
-            mode: 'cors',
-            cache: 'no-cache',
-          });
-          if (!localResponse.ok) {
-            throw new Error('Local stream không khả dụng');
-          }
-        } catch {
-          setStreamError('Không thể kết nối stream. Kiểm tra Pi có đang chạy.');
-          setIsLoading(false);
-          return;
-        }
-      } else {
-        setUseLocalStream(false);
-      }
-
-      setStreamKey(Date.now());
-      setIsConnected(true);
-      setStreamError(null);
-
-      if (healthCheckRef.current) {
-        clearInterval(healthCheckRef.current);
-      }
-      healthCheckRef.current = setInterval(checkHealth, STREAM_CONFIG.healthCheckInterval);
-
-      checkHealth();
-    } catch (err: any) {
-      setStreamError(err.message || 'Không thể kết nối stream');
-    } finally {
-      setIsLoading(false);
+    if (healthCheckRef.current) {
+      clearInterval(healthCheckRef.current);
     }
+    healthCheckRef.current = setInterval(checkHealth, STREAM_CONFIG.healthCheckInterval);
   }, [checkHealth]);
 
   const disconnectStream = useCallback(() => {
@@ -157,6 +124,7 @@ export function CameraView() {
 
   const handleStreamLoad = useCallback(() => {
     setStreamError(null);
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -175,6 +143,13 @@ export function CameraView() {
   }, [isRecording]);
 
   useEffect(() => {
+    // Auto-connect on first mount — mirror ControlView CameraPanel UX.
+    setStreamKey(Date.now());
+    setIsConnected(true);
+    setIsLoading(true);
+    setStreamError(null);
+    healthCheckRef.current = setInterval(checkHealth, STREAM_CONFIG.healthCheckInterval);
+
     return () => {
       if (healthCheckRef.current) {
         clearInterval(healthCheckRef.current);
@@ -183,6 +158,7 @@ export function CameraView() {
         clearTimeout(reconnectRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFullscreen = () => {

@@ -87,7 +87,7 @@ export default function RegisterPage() {
 
     const result = await register({ name, email, password });
     if (result.success) {
-      router.push('/');
+      router.push('/robots');
     } else {
       setError(result.error || 'Đăng ký thất bại');
     }
