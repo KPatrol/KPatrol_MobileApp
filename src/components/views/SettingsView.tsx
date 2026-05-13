@@ -20,6 +20,8 @@ import {
   Zap,
   X,
   Sparkles,
+  Save,
+  Undo2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -30,6 +32,7 @@ import {
   useRobotStore,
   type QuickActionConfig,
   type QuickActionId,
+  type AppSettings,
 } from '@/store/robotStore';
 import { useMQTT } from '@/providers/MQTTProvider';
 import { useAuthContext } from '@/providers/AuthProvider';
@@ -85,6 +88,12 @@ const SECTION_TONE: Record<Tone, { ring: string; text: string; bg: string; glow:
   },
 };
 
+interface DraftRobotPrefs {
+  safetyMode: boolean;
+  obstacleAvoidance: boolean;
+  maxSpeed: number;
+}
+
 export function SettingsView() {
   const {
     settings,
@@ -108,6 +117,56 @@ export function SettingsView() {
       .slice(-2)
       .map((s) => s.charAt(0).toUpperCase())
       .join('') || 'KP';
+
+  // ===== Draft state — changes are NOT persisted until user clicks Lưu =====
+  const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
+  const [draftPrefs, setDraftPrefs] = useState<DraftRobotPrefs>({
+    safetyMode,
+    obstacleAvoidance,
+    maxSpeed,
+  });
+
+  // Sync draft when store changes externally (e.g., on first mount or after logout reset)
+  useEffect(() => {
+    setDraftSettings(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    setDraftPrefs({ safetyMode, obstacleAvoidance, maxSpeed });
+  }, [safetyMode, obstacleAvoidance, maxSpeed]);
+
+  const updateDraftSettings = (patch: Partial<AppSettings>) =>
+    setDraftSettings((prev) => ({ ...prev, ...patch }));
+
+  const updateDraftPrefs = (patch: Partial<DraftRobotPrefs>) =>
+    setDraftPrefs((prev) => ({ ...prev, ...patch }));
+
+  const isDirty = useMemo(() => {
+    if (JSON.stringify(draftSettings) !== JSON.stringify(settings)) return true;
+    if (draftPrefs.safetyMode !== safetyMode) return true;
+    if (draftPrefs.obstacleAvoidance !== obstacleAvoidance) return true;
+    if (Math.abs(draftPrefs.maxSpeed - maxSpeed) > 1e-6) return true;
+    return false;
+  }, [draftSettings, settings, draftPrefs, safetyMode, obstacleAvoidance, maxSpeed]);
+
+  const commitDraft = () => {
+    updateSettings(draftSettings);
+    if (draftPrefs.safetyMode !== safetyMode) {
+      setSafetyMode(draftPrefs.safetyMode);
+      mqtt.setSafetyEnabled(draftPrefs.safetyMode);
+    }
+    if (draftPrefs.obstacleAvoidance !== obstacleAvoidance) {
+      setObstacleAvoidance(draftPrefs.obstacleAvoidance);
+    }
+    if (Math.abs(draftPrefs.maxSpeed - maxSpeed) > 1e-6) {
+      setMaxSpeed(draftPrefs.maxSpeed);
+    }
+  };
+
+  const discardDraft = () => {
+    setDraftSettings(settings);
+    setDraftPrefs({ safetyMode, obstacleAvoidance, maxSpeed });
+  };
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingField, setEditingField] = useState<{
@@ -141,8 +200,8 @@ export function SettingsView() {
     setShowEditModal(true);
   };
 
-  // ===== Quick actions configuration =====
-  const quickActionConfigs = settings.quickActions ?? [];
+  // ===== Quick actions configuration (operates on draft) =====
+  const quickActionConfigs = draftSettings.quickActions ?? [];
   const quickActionMap = useMemo(() => {
     const map = new Map<QuickActionId, QuickActionConfig>();
     for (const qa of quickActionConfigs) map.set(qa.id, qa);
@@ -163,7 +222,7 @@ export function SettingsView() {
     } else {
       next = existing;
     }
-    updateSettings({ quickActions: next });
+    updateDraftSettings({ quickActions: next });
   };
 
   return (
@@ -213,7 +272,7 @@ export function SettingsView() {
       </div>
 
       {/* Scrollable settings sections — responsive grid uses full width */}
-      <div className="md:flex-1 md:min-h-0 md:overflow-y-auto -mx-1 px-1 pb-2">
+      <div className="md:flex-1 md:min-h-0 md:overflow-y-auto -mx-1 px-1 pb-24 md:pb-24">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4 auto-rows-min">
         {/* Connection Settings */}
         <SettingsSection
@@ -237,8 +296,8 @@ export function SettingsView() {
           <SettingRow
             label="Tự động kết nối lại"
             toggle
-            enabled={settings.autoReconnect}
-            onToggle={(v) => updateSettings({ autoReconnect: v })}
+            enabled={draftSettings.autoReconnect}
+            onToggle={(v) => updateDraftSettings({ autoReconnect: v })}
           />
           {!mqtt.isConnected && (
             <div className="py-3">
@@ -262,29 +321,26 @@ export function SettingsView() {
         >
           <SettingRow
             label="Tốc độ tối đa"
-            value={`${maxSpeed.toFixed(1)} m/s`}
+            value={`${draftPrefs.maxSpeed.toFixed(1)} m/s`}
             editable
             onEdit={(label, value) =>
               handleEdit(label, value, (v) => {
                 const n = parseFloat(v);
-                if (!isNaN(n) && n > 0 && n <= 2) setMaxSpeed(n);
+                if (!isNaN(n) && n > 0 && n <= 2) updateDraftPrefs({ maxSpeed: n });
               })
             }
           />
           <SettingRow
             label="Chế độ an toàn"
             toggle
-            enabled={safetyMode}
-            onToggle={(v) => {
-              setSafetyMode(v);
-              mqtt.setSafetyEnabled(v);
-            }}
+            enabled={draftPrefs.safetyMode}
+            onToggle={(v) => updateDraftPrefs({ safetyMode: v })}
           />
           <SettingRow
             label="Tự động tránh vật cản"
             toggle
-            enabled={obstacleAvoidance}
-            onToggle={setObstacleAvoidance}
+            enabled={draftPrefs.obstacleAvoidance}
+            onToggle={(v) => updateDraftPrefs({ obstacleAvoidance: v })}
           />
         </SettingsSection>
 
@@ -359,22 +415,22 @@ export function SettingsView() {
           <SettingRow
             label="Thông báo đẩy"
             toggle
-            enabled={settings.pushNotifications}
-            onToggle={(v) => updateSettings({ pushNotifications: v })}
+            enabled={draftSettings.pushNotifications}
+            onToggle={(v) => updateDraftSettings({ pushNotifications: v })}
           />
           <SettingRow
             label="Âm thanh"
             toggle
             icon={Volume2}
-            enabled={settings.soundEnabled}
-            onToggle={(v) => updateSettings({ soundEnabled: v })}
+            enabled={draftSettings.soundEnabled}
+            onToggle={(v) => updateDraftSettings({ soundEnabled: v })}
           />
           <SettingRow
             label="Rung"
             toggle
             icon={Vibrate}
-            enabled={settings.vibrationEnabled}
-            onToggle={(v) => updateSettings({ vibrationEnabled: v })}
+            enabled={draftSettings.vibrationEnabled}
+            onToggle={(v) => updateDraftSettings({ vibrationEnabled: v })}
           />
         </SettingsSection>
 
@@ -387,14 +443,14 @@ export function SettingsView() {
         >
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
-              {settings.darkMode ? (
+              {draftSettings.darkMode ? (
                 <Moon className="w-4 h-4 text-purple-300" />
               ) : (
                 <Sun className="w-4 h-4 text-amber-300" />
               )}
               <span className="text-slate-200">Chế độ tối</span>
             </div>
-            <ToggleSwitch enabled={settings.darkMode} onChange={(v) => updateSettings({ darkMode: v })} />
+            <ToggleSwitch enabled={draftSettings.darkMode} onChange={(v) => updateDraftSettings({ darkMode: v })} />
           </div>
           <SettingRow label="Ngôn ngữ" value="Tiếng Việt" />
         </SettingsSection>
@@ -485,6 +541,38 @@ export function SettingsView() {
         </div>
       </div>
 
+      {/* Sticky Save / Discard footer — only shown when draft differs from store */}
+      {isDirty && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[min(96vw,42rem)] animate-slide-up">
+          <div className="relative overflow-hidden rounded-2xl bg-slate-950/95 backdrop-blur-md ring-1 ring-cyan-500/40 shadow-[0_12px_48px_rgba(0,0,0,0.6)]">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent" />
+            <div className="relative p-3 flex items-center gap-3">
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 ring-1 ring-amber-500/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-[11px] uppercase tracking-wider font-bold text-amber-200">
+                  Có thay đổi chưa lưu
+                </span>
+              </div>
+              <div className="flex-1" />
+              <button
+                onClick={discardDraft}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/60 ring-1 ring-slate-700/60 text-slate-200 font-bold uppercase tracking-wider text-xs hover:bg-slate-700/60 hover:ring-slate-600 transition-all"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                Hoàn tác
+              </button>
+              <button
+                onClick={commitDraft}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-bold uppercase tracking-wider text-xs shadow-[0_0_24px_rgba(34,211,238,0.4)] hover:shadow-[0_0_32px_rgba(34,211,238,0.6)] transition-all"
+              >
+                <Save className="w-3.5 h-3.5" />
+                Lưu thay đổi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       {showEditModal && (
         <div
@@ -537,7 +625,7 @@ export function SettingsView() {
                     }}
                     className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-bold uppercase tracking-wider text-sm shadow-[0_0_24px_rgba(34,211,238,0.35)] hover:shadow-[0_0_32px_rgba(34,211,238,0.5)] transition-all"
                   >
-                    Lưu
+                    Cập nhật
                   </button>
                 </div>
               </div>
@@ -568,7 +656,8 @@ export function SettingsView() {
                   </p>
                   <h3 className="text-lg font-bold text-white">Xác nhận đăng xuất</h3>
                   <p className="text-sm text-slate-400 mt-1">
-                    Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?
+                    Bạn có chắc chắn muốn đăng xuất khỏi tài khoản? Mọi thay đổi
+                    chưa lưu sẽ bị bỏ qua và giao diện sẽ trở về mặc định.
                   </p>
                 </div>
               </div>
