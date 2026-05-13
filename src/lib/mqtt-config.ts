@@ -207,6 +207,8 @@ export type CommandType =
   | 'R'       // Rotate Right (CW)
   | 'DL'      // Diagonal Forward-Left
   | 'DR'      // Diagonal Forward-Right
+  | 'BL'      // Diagonal Backward-Left
+  | 'BR'      // Diagonal Backward-Right
   | 'S'       // Stop (Brake)
   // Individual motor commands
   | 'FR_F' | 'FR_B' | 'FR_S'  // Front-Right
@@ -299,6 +301,10 @@ export const MECANUM_MOVEMENTS: Record<string, { FR: number; FL: number; BR: num
 export type SafetyZone = 'safe' | 'slow' | 'caution' | 'danger';
 
 // V3: ToF Sensor Data
+// Firmware v3.1+ adds valid_mask: 6-bit field where bit N = lane N produced a
+// fresh, status==0 reading on this frame (bit0=front, 1=front_left, 2=front_right,
+// 3=left, 4=right, 5=back). Older firmware omits the field; treat undefined as
+// "all six valid" (0x3F) for backward compatibility.
 export interface ToFData {
   front: number;
   front_left: number;
@@ -306,6 +312,7 @@ export interface ToFData {
   left: number;
   right: number;
   back: number;
+  valid_mask?: number;
   timestamp: number;
 }
 
