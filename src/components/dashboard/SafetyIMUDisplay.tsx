@@ -53,8 +53,10 @@ function fmtMm(mm: number | undefined): string {
 //   BACK        (150, 193) → down   → guide tip (150, 265)
 
 interface BeamCfg {
-  key: keyof Omit<ToFData, 'timestamp'>;
+  key: keyof Omit<ToFData, 'timestamp' | 'valid_mask'>;
   shortLabel: string;
+  // Bit position within ToFData.valid_mask (firmware order: front, FL, FR, L, R, B).
+  bit: number;
   ox: number; oy: number;
   dx: number; dy: number;
   lx: number; ly: number;        // fixed label position
@@ -62,12 +64,12 @@ interface BeamCfg {
 }
 
 const BEAMS: BeamCfg[] = [
-  { key: 'front',       shortLabel: 'F',    ox: 150, oy: 117, dx:  0,     dy: -1,      lx: 150, ly:  26, lAnchor: 'middle' },
-  { key: 'front_left',  shortLabel: 'FL',   ox: 123, oy: 125, dx: -0.5,  dy: -0.866,  lx:  70, ly:  44, lAnchor: 'end'    },
-  { key: 'front_right', shortLabel: 'FR',   ox: 177, oy: 125, dx:  0.5,  dy: -0.866,  lx: 230, ly:  44, lAnchor: 'start'  },
-  { key: 'left',        shortLabel: 'L',    ox: 120, oy: 155, dx: -1,     dy:  0,      lx:  42, ly: 150, lAnchor: 'end'    },
-  { key: 'right',       shortLabel: 'R',    ox: 180, oy: 155, dx:  1,     dy:  0,      lx: 258, ly: 150, lAnchor: 'start'  },
-  { key: 'back',        shortLabel: 'B',    ox: 150, oy: 193, dx:  0,     dy:  1,      lx: 150, ly: 266, lAnchor: 'middle' },
+  { key: 'front',       shortLabel: 'F',  bit: 0, ox: 150, oy: 117, dx:  0,     dy: -1,      lx: 150, ly:  26, lAnchor: 'middle' },
+  { key: 'front_left',  shortLabel: 'FL', bit: 1, ox: 123, oy: 125, dx: -0.5,  dy: -0.866,  lx:  70, ly:  44, lAnchor: 'end'    },
+  { key: 'front_right', shortLabel: 'FR', bit: 2, ox: 177, oy: 125, dx:  0.5,  dy: -0.866,  lx: 230, ly:  44, lAnchor: 'start'  },
+  { key: 'left',        shortLabel: 'L',  bit: 3, ox: 120, oy: 155, dx: -1,     dy:  0,      lx:  42, ly: 150, lAnchor: 'end'    },
+  { key: 'right',       shortLabel: 'R',  bit: 4, ox: 180, oy: 155, dx:  1,     dy:  0,      lx: 258, ly: 150, lAnchor: 'start'  },
+  { key: 'back',        shortLabel: 'B',  bit: 5, ox: 150, oy: 193, dx:  0,     dy:  1,      lx: 150, ly: 266, lAnchor: 'middle' },
 ];
 
 const BEAM_WIDTH  = { safe: 1.5, slow: 2, caution: 3, danger: 4.5 };
@@ -142,10 +144,16 @@ function RobotSensorView({ tof, thresholds, mini, xsmini, fluid }: RobotSensorVi
       ))}
 
       {/* ── ToF Beams ── */}
-      {BEAMS.map(({ key, ox, oy, dx, dy, lx, ly, lAnchor, shortLabel }) => {
+      {BEAMS.map(({ key, bit, ox, oy, dx, dy, lx, ly, lAnchor, shortLabel }) => {
         const raw = tof[key] as number | undefined;
-        const zone = distToZone(raw ?? 9999, thresholds);
-        const color = Z[zone].hex;
+        // Firmware v3.1+: valid_mask bit cleared = lane unread on this frame
+        // (mux fault, sensor not initialised, or status!=0). Treat as unknown
+        // so the operator doesn't read 9999 as "no obstacle". Older firmware
+        // omits the field entirely → mask defaults to all-valid (0x3F).
+        const mask = tof.valid_mask;
+        const isInvalid = mask !== undefined && (mask & (1 << bit)) === 0;
+        const zone: SafetyZone = isInvalid ? 'safe' : distToZone(raw ?? 9999, thresholds);
+        const color = isInvalid ? '#6b7280' : Z[zone].hex;
         const px = distToPx(raw && raw < 8000 ? raw : SCALE_MM);
         const ex  = ox + dx * px;
         const ey  = oy + dy * px;
@@ -156,7 +164,7 @@ function RobotSensorView({ tof, thresholds, mini, xsmini, fluid }: RobotSensorVi
         const isAlarm   = zone === 'danger' || zone === 'caution';
         const glowId    = isDanger ? 'glow-l' : isAlarm ? 'glow-m' : 'glow-s';
         const dotR      = isDanger ? 6 : isAlarm ? 5 : 3.5;
-        const distText  = fmtMm(raw);
+        const distText  = isInvalid ? '?' : fmtMm(raw);
 
         return (
           <g key={key}>
