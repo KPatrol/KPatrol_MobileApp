@@ -398,8 +398,18 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
         break;
 
       case T.LOG:
+        // Pi log topic is high-volume informational chatter — keep in console
+        // and local store, but don't persist every line to backend (was the
+        // primary cause of /robot-events 429 storms).
         console.log('[Robot Log]:', payload.message);
-        if (payload.message) logEvent('system', 'Robot Log', payload.message, 'info', { raw: payload });
+        if (payload.message) {
+          useRobotStore.getState().addHistoryItem({
+            type: 'system' as any,
+            title: 'Robot Log',
+            description: payload.message,
+            details: { raw: payload },
+          });
+        }
         break;
 
       case T.ERROR:
@@ -852,9 +862,13 @@ export function useRobotControl() {
     rotateLeft: (speed?: number) => sendCommand('L', speed),
     rotateRight: (speed?: number) => sendCommand('R', speed),
 
-    // Diagonal
+    // Diagonal (forward)
     diagonalLeft: (speed?: number) => sendCommand('DL', speed),
     diagonalRight: (speed?: number) => sendCommand('DR', speed),
+
+    // Diagonal (backward)
+    backwardDiagonalLeft: (speed?: number) => sendCommand('BL', speed),
+    backwardDiagonalRight: (speed?: number) => sendCommand('BR', speed),
 
     // Stop
     stop: () => sendCommand('S'),
