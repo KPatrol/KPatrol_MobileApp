@@ -143,9 +143,37 @@ async function apiFetchStrict<T>(
 
 // ── Robot Events API (Public — no JWT) ──────────────────────────────────────
 
+// Client-side dedup + throttle for `log()`.
+// Why: MQTTProvider calls log() on every chatty Pi message (HEARTBEAT, LOG,
+// SAFETY, ...). Without throttling, nginx's api zone (30r/s, burst 20) saturates
+// and every subsequent POST 429s — visible as a wall of red in DevTools.
+const _logDedupCache = new Map<string, number>(); // key -> last-sent ms
+const _LOG_DEDUP_WINDOW_MS = 5000;          // drop identical events <5s apart
+const _LOG_RATE_WINDOW_MS = 1000;
+const _LOG_RATE_MAX = 5;                    // ≤5 posts/sec from this tab
+let _logRateBucket: number[] = [];
+
+function _logShouldDrop(key: string): boolean {
+  const now = Date.now();
+  const last = _logDedupCache.get(key);
+  if (last !== undefined && now - last < _LOG_DEDUP_WINDOW_MS) return true;
+  _logRateBucket = _logRateBucket.filter(t => now - t < _LOG_RATE_WINDOW_MS);
+  if (_logRateBucket.length >= _LOG_RATE_MAX) return true;
+  _logDedupCache.set(key, now);
+  _logRateBucket.push(now);
+  // GC: prune old dedup entries occasionally
+  if (_logDedupCache.size > 200) {
+    _logDedupCache.forEach((t, k) => {
+      if (now - t > _LOG_DEDUP_WINDOW_MS * 2) _logDedupCache.delete(k);
+    });
+  }
+  return false;
+}
+
 export const robotEventsApi = {
   /**
-   * Log a new robot event to backend (fire-and-forget)
+   * Log a new robot event to backend (fire-and-forget).
+   * Throttled + deduped client-side to protect the api rate-limit zone.
    */
   async log(event: {
     eventType: RobotEvent['eventType'];
@@ -154,6 +182,8 @@ export const robotEventsApi = {
     severity?: RobotEvent['severity'];
     data?: Record<string, any>;
   }): Promise<RobotEvent | null> {
+    const key = `${event.eventType}|${event.title}|${event.description}`;
+    if (_logShouldDrop(key)) return null;
     return apiFetch<RobotEvent>('/robot-events', {
       method: 'POST',
       body: JSON.stringify({
