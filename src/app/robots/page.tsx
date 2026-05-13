@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Plus, Wifi, Battery, Clock, ChevronRight, AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import Image from 'next/image';
+import { Plus, Wifi, Battery, Clock, ChevronRight, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { useRobotContext } from '@/providers/RobotProvider';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { Robot, ApiError } from '@/lib/api';
@@ -86,8 +87,15 @@ export default function RobotsPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-dark-border">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-primary" />
+          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/30 overflow-hidden flex items-center justify-center">
+            <Image
+              src="/robots/robot_top_view.png"
+              alt="K-Patrol"
+              width={36}
+              height={36}
+              className="object-contain drop-shadow-[0_0_6px_rgba(34,211,238,0.5)]"
+              priority
+            />
           </div>
           <div>
             <h1 className="text-white font-semibold text-sm">K-Patrol</h1>
@@ -116,7 +124,16 @@ export default function RobotsPage() {
           </div>
         ) : robots.length === 0 ? (
           <div className="text-center py-16">
-            <Bot className="w-12 h-12 text-dark-muted mx-auto mb-3" />
+            <div className="relative w-32 h-32 mx-auto mb-4 opacity-60">
+              <div className="absolute inset-0 rounded-full bg-primary/10 blur-2xl" />
+              <Image
+                src="/robots/robot_main.png"
+                alt=""
+                fill
+                sizes="128px"
+                className="object-contain"
+              />
+            </div>
             <p className="text-dark-muted">Chưa có robot nào. Hãy thêm robot mới.</p>
           </div>
         ) : (
@@ -137,11 +154,25 @@ export default function RobotsPage() {
                   onClick={() => handleSelect(robot)}
                   className="w-full p-4 flex items-center gap-4 text-left"
                 >
-                  {/* Icon */}
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 relative">
-                    <Bot className="w-6 h-6 text-primary" />
+                  {/* Robot avatar */}
+                  <div className={cn(
+                    'relative w-14 h-14 rounded-xl shrink-0 overflow-hidden ring-1 transition-all',
+                    live
+                      ? 'bg-gradient-to-br from-primary/20 to-blue-600/10 ring-primary/40 shadow-[0_0_12px_rgba(34,211,238,0.25)]'
+                      : 'bg-slate-900/60 ring-dark-border'
+                  )}>
+                    <Image
+                      src="/robots/robot_top_view.png"
+                      alt={robot.name}
+                      fill
+                      sizes="56px"
+                      className={cn(
+                        'object-contain p-1 transition-all',
+                        live ? 'drop-shadow-[0_0_4px_rgba(34,211,238,0.6)]' : 'grayscale opacity-60'
+                      )}
+                    />
                     {live && (
-                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 ring-2 ring-dark-surface animate-pulse" />
+                      <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 ring-2 ring-dark-surface animate-pulse" />
                     )}
                   </div>
 
