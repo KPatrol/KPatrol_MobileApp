@@ -17,9 +17,15 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'K-Patrol',
   },
+  // Standard PWA meta — Apple variant is auto-emitted via appleWebApp above,
+  // but Chrome now warns when only the Apple form is present. Both are needed
+  // for cross-browser PWA install support.
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
   icons: {
-    icon: '/icon-192.png',
-    apple: '/apple-icon.png',
+    icon: '/logo.png',
+    apple: '/logo.png',
   },
 };
 
