@@ -4,7 +4,6 @@ import Image from 'next/image';
 import {
   Activity,
   Battery,
-  Bot,
   ChevronDown,
   Gamepad2,
   HelpCircle,
@@ -386,8 +385,14 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
               className="w-full p-3 flex items-center gap-3"
             >
               <div className="relative">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 ring-1 ring-cyan-400/40 shadow-[0_0_14px_rgba(34,211,238,0.3)] flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-cyan-300" />
+                <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 ring-1 ring-cyan-400/40 shadow-[0_0_14px_rgba(34,211,238,0.3)] overflow-hidden">
+                  <Image
+                    src="/robots/robot_top_view.png"
+                    alt="K-Patrol robot"
+                    fill
+                    sizes="48px"
+                    className="object-contain p-1 drop-shadow-[0_0_6px_rgba(34,211,238,0.55)]"
+                  />
                 </div>
                 <div
                   className={cn(
