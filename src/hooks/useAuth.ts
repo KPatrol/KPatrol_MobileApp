@@ -250,11 +250,20 @@ export function useAuth() {
       console.error('[Auth] Logout error:', error);
     }
 
-    // Clear storage
+    // Clear storage — including Zustand persist + any UI prefs
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     localStorage.removeItem('selectedRobotId');
+    // Wipe every kpatrol-* persist key so settings reset to defaults on next login
+    if (typeof window !== 'undefined') {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('kpatrol-')) keysToRemove.push(k);
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    }
     sessionStorage.removeItem('refreshToken');
     clearAuthCookie();
 
