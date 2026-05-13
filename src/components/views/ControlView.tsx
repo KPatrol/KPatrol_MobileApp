@@ -962,20 +962,26 @@ function Joystick() {
   const maxRadius = 95;
 
   // Determine movement command based on joystick position
-  // Uses ESP32-S3 serial protocol commands
+  // Uses ESP32-S3 serial protocol commands. y>0 = forward (up), x>0 = right.
   const getCommandFromPosition = useCallback((x: number, y: number): string | null => {
     const threshold = 0.3;
+    const diagThreshold = 0.45; // require both axes meaningfully active for a diagonal
     const absX = Math.abs(x);
     const absY = Math.abs(y);
 
     if (absX < threshold && absY < threshold) return 'S'; // Stop
 
-    // Determine primary direction
-    if (absY > absX) {
-      return y > 0 ? 'F' : 'B'; // Forward / Backward
-    } else {
-      return x > 0 ? 'SR' : 'SL'; // Strafe Right / Strafe Left
+    // Both axes engaged → diagonal (DL/DR for forward, BL/BR for backward)
+    if (absX >= diagThreshold && absY >= diagThreshold) {
+      if (y > 0) return x > 0 ? 'DR' : 'DL';
+      return x > 0 ? 'BR' : 'BL';
     }
+
+    // Single dominant axis
+    if (absY > absX) {
+      return y > 0 ? 'F' : 'B';
+    }
+    return x > 0 ? 'SR' : 'SL';
   }, []);
 
   // Send command via MQTT (using ESP32-S3 protocol)
@@ -986,11 +992,15 @@ function Joystick() {
     lastCommandRef.current = command;
 
     switch (command) {
-      case 'F':  robotControl.forward();      break;
-      case 'B':  robotControl.backward();     break;
-      case 'SL': robotControl.strafeLeft();   break;
-      case 'SR': robotControl.strafeRight();  break;
-      case 'S':  robotControl.stop();         break;
+      case 'F':  robotControl.forward();              break;
+      case 'B':  robotControl.backward();             break;
+      case 'SL': robotControl.strafeLeft();           break;
+      case 'SR': robotControl.strafeRight();          break;
+      case 'DL': robotControl.diagonalLeft();         break;
+      case 'DR': robotControl.diagonalRight();        break;
+      case 'BL': robotControl.backwardDiagonalLeft(); break;
+      case 'BR': robotControl.backwardDiagonalRight();break;
+      case 'S':  robotControl.stop();                 break;
     }
   }, [robotControl, getCommandFromPosition]);
 
@@ -1182,12 +1192,10 @@ function DPad() {
         robotControl.diagonalRight(); // DR
         break;
       case 'down-left':
-        // Diagonal back-left (reverse of DR)
-        robotControl.backward();
+        robotControl.backwardDiagonalLeft();   // BL
         break;
       case 'down-right':
-        // Diagonal back-right (reverse of DL)
-        robotControl.backward();
+        robotControl.backwardDiagonalRight();  // BR
         break;
     }
   };
