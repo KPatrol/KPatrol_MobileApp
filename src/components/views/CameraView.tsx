@@ -53,7 +53,12 @@ export function CameraView() {
   const [streamKey, setStreamKey] = useState(Date.now());
 
   const getStreamUrl = useCallback(() => {
-    const baseUrl = useLocalStream ? STREAM_CONFIG.localStreamUrl : STREAM_CONFIG.streamUrl;
+    // Fall back to the public URL when LAN host is unset; otherwise the
+    // <img> renders broken when the local toggle is on but no env var
+    // has been provided.
+    const baseUrl = useLocalStream && STREAM_CONFIG.localStreamUrl
+      ? STREAM_CONFIG.localStreamUrl
+      : STREAM_CONFIG.streamUrl;
     return `${baseUrl}?t=${streamKey}`;
   }, [useLocalStream, streamKey]);
 
@@ -181,7 +186,9 @@ export function CameraView() {
     if (!isConnected) return;
 
     try {
-      const snapshotUrl = useLocalStream ? STREAM_CONFIG.localSnapshotUrl : STREAM_CONFIG.snapshotUrl;
+      const snapshotUrl = useLocalStream && STREAM_CONFIG.localSnapshotUrl
+        ? STREAM_CONFIG.localSnapshotUrl
+        : STREAM_CONFIG.snapshotUrl;
       const response = await fetch(`${snapshotUrl}?t=${Date.now()}`);
 
       if (response.ok) {
