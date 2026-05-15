@@ -345,3 +345,61 @@ export const robotsApi = {
   },
 };
 
+// ── Detection Alerts API (Requires JWT) ──────────────────────────────────────
+// Backend persists every detection alert ingested from MQTT into the `Alert`
+// table; this client surface lets the UI backfill history when MQTT only
+// delivers live events.
+
+export type PrismaAlertType =
+  | 'PERSON_DETECTED'
+  | 'FIRE_DETECTED'
+  | 'MOTION_DETECTED'
+  | 'LOW_BATTERY'
+  | 'CONNECTION_LOST'
+  | 'OBSTACLE_DETECTED'
+  | 'SYSTEM_ERROR'
+  | 'SAFETY_DANGER'
+  | 'SAFETY_CAUTION'
+  | 'IMU_ERROR';
+
+export interface PrismaAlert {
+  id: string;
+  robotId: string;
+  type: PrismaAlertType;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  message: string;
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+  confidence: number | null;
+  bboxX: number | null;
+  bboxY: number | null;
+  bboxW: number | null;
+  bboxH: number | null;
+  frameWidth: number | null;
+  frameHeight: number | null;
+  snapshotB64: string | null;
+  externalId: number | null;
+  data: Record<string, any> | null;
+  createdAt: string;
+}
+
+export const robotAlertsApi = {
+  /** Fetch unacknowledged alerts for a robot (newest first). */
+  async list(robotId: string): Promise<PrismaAlert[]> {
+    return (
+      (await apiFetch<PrismaAlert[]>(`/robots/${robotId}/alerts`, {
+        headers: authHeaders(),
+      })) ?? []
+    );
+  },
+
+  async acknowledge(alertId: string): Promise<boolean> {
+    return (
+      (await apiFetch<any>(`/robots/alerts/${alertId}/acknowledge`, {
+        method: 'PUT',
+        headers: authHeaders(),
+      })) !== null
+    );
+  },
+};
+

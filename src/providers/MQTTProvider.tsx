@@ -33,8 +33,50 @@ import {
   GPSData,
 } from '@/lib/mqtt-config';
 import { useRobotStore } from '@/store/robotStore';
-import { robotEventsApi } from '@/lib/api';
+import { robotEventsApi, robotAlertsApi, PrismaAlert } from '@/lib/api';
 import { useRobotContext } from './RobotProvider';
+
+// Map Prisma Alert enum → mobile-app DetectionKind. Returns null for alert
+// types that don't fit the detection-alert UX (LOW_BATTERY, IMU_ERROR, …);
+// caller should skip those when backfilling.
+function alertTypeToKind(type: PrismaAlert['type']): DetectionAlert['kind'] | null {
+  switch (type) {
+    case 'PERSON_DETECTED': return 'person';
+    case 'FIRE_DETECTED':   return 'fire';
+    case 'MOTION_DETECTED': return 'motion';
+    default:                return null;
+  }
+}
+
+function mapPrismaAlertToDetection(
+  row: PrismaAlert,
+  fallbackSerial: string,
+): DetectionAlert | null {
+  const kind = alertTypeToKind(row.type);
+  if (!kind) return null;
+  const bbox: [number, number, number, number] = [
+    row.bboxX ?? 0,
+    row.bboxY ?? 0,
+    row.bboxW ?? 0,
+    row.bboxH ?? 0,
+  ];
+  const frame_size: [number, number] | undefined =
+    row.frameWidth != null && row.frameHeight != null
+      ? [row.frameWidth, row.frameHeight]
+      : undefined;
+  const tsSeconds = Math.floor(new Date(row.createdAt).getTime() / 1000);
+  return {
+    kind,
+    confidence: row.confidence ?? 0,
+    bbox,
+    ts: tsSeconds,
+    snapshot: (row.data && typeof row.data.snapshot === 'string') ? row.data.snapshot : '',
+    robot: fallbackSerial,
+    frame_size,
+    snapshot_b64: row.snapshotB64 ?? undefined,
+    id: row.externalId ?? undefined,
+  };
+}
 
 // Types
 interface MQTTContextValue {
@@ -157,6 +199,7 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
   // Pull selected robot serial from RobotProvider
   const { selectedRobot } = useRobotContext();
   const activeSerial = selectedRobot?.serialNumber ?? 'KPATROL-001';
+  const activeRobotId = selectedRobot?.id ?? null;
   // Keep a ref so async callbacks (connect, re-subscribe) always read latest serial
   const activeSerialRef = useRef<string>(activeSerial);
 
@@ -165,6 +208,42 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
     activeSerialRef.current = activeSerial;
     topicsRef.current = getTopics(activeSerial);
   }, [activeSerial]);
+
+  // Backfill detection alerts from backend REST when robot selection changes.
+  // MQTT only carries *live* alerts — if the Pi has been offline since the
+  // page was opened, the user would see an empty Alerts view despite the DB
+  // having rows. Pulling /robots/:id/alerts seeds the rolling buffer with
+  // unacknowledged history; live MQTT messages continue to prepend new ones.
+  useEffect(() => {
+    if (!activeRobotId) return;
+    let cancelled = false;
+    void (async () => {
+      const rows = await robotAlertsApi.list(activeRobotId);
+      if (cancelled || rows.length === 0) return;
+      const mapped = rows
+        .map((r) => mapPrismaAlertToDetection(r, activeSerial))
+        .filter((a): a is DetectionAlert => a !== null);
+      if (mapped.length === 0) return;
+      // Merge with live buffer; dedup by externalId when present, else by ts+kind.
+      setDetectionAlerts((prev) => {
+        const seen = new Set<string>();
+        const keyOf = (a: DetectionAlert) =>
+          a.id != null ? `id:${a.id}` : `${a.kind}@${a.ts}`;
+        const out: DetectionAlert[] = [];
+        for (const a of prev) {
+          const k = keyOf(a);
+          if (!seen.has(k)) { seen.add(k); out.push(a); }
+        }
+        for (const a of mapped) {
+          const k = keyOf(a);
+          if (!seen.has(k)) { seen.add(k); out.push(a); }
+        }
+        out.sort((x, y) => y.ts - x.ts);
+        return out.slice(0, 50);
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [activeRobotId, activeSerial]);
 
   // Connect to MQTT broker
   const connect = useCallback(async () => {
