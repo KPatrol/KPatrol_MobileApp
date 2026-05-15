@@ -86,8 +86,12 @@ export function useAuth() {
             return;
           }
 
-          // Token invalid, try refresh
-          const refreshToken = localStorage.getItem('refreshToken');
+          // Token invalid, try refresh — check session storage too,
+          // because login() puts refreshToken in sessionStorage when
+          // rememberMe is false. Without this, non-remembered users get
+          // silently logged out as soon as the access token expires.
+          const refreshToken =
+            localStorage.getItem('refreshToken') ?? sessionStorage.getItem('refreshToken');
           if (refreshToken) {
             await refreshAccessToken(refreshToken);
             return;
@@ -95,6 +99,10 @@ export function useAuth() {
         }
       } catch (error) {
         console.error('[Auth] Init failed:', error);
+        // Transient network failure — keep tokens, just mark not loading.
+        // Next protected fetch will re-trigger auth or refresh.
+        setState((prev) => ({ ...prev, isLoading: false }));
+        return;
       }
 
       // No valid auth found
@@ -122,9 +130,16 @@ export function useAuth() {
 
       if (response.ok) {
         const data: AuthResponse = await response.json();
-        
+
+        // Keep refreshToken in whichever storage already held it so the
+        // user's rememberMe choice survives refreshes.
+        const inLocal = localStorage.getItem('refreshToken') !== null;
         localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
+        if (inLocal) {
+          localStorage.setItem('refreshToken', data.refreshToken);
+        } else {
+          sessionStorage.setItem('refreshToken', data.refreshToken);
+        }
         localStorage.setItem('user', JSON.stringify(data.user));
         setAuthCookie(data.accessToken);
 
@@ -137,13 +152,22 @@ export function useAuth() {
 
         return true;
       }
-    } catch (error) {
-      console.error('[Auth] Refresh failed:', error);
-    }
 
-    // Refresh failed, logout
-    logout();
-    return false;
+      // Only logout on a definite auth rejection. Server errors (5xx) are
+      // likely transient — keep credentials so the next interaction retries.
+      if (response.status === 401 || response.status === 403) {
+        logout();
+        return false;
+      }
+
+      setState((prev) => ({ ...prev, isLoading: false }));
+      return false;
+    } catch (error) {
+      // Network failure — do not nuke the session; let the next call retry.
+      console.error('[Auth] Refresh failed:', error);
+      setState((prev) => ({ ...prev, isLoading: false }));
+      return false;
+    }
   };
 
   // Login
