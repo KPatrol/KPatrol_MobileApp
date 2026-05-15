@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  Menu, 
-  Bell, 
-  Wifi, 
-  WifiOff, 
-  Battery, 
-  BatteryLow, 
-  BatteryMedium, 
+import {
+  Menu,
+  Bell,
+  Wifi,
+  WifiOff,
+  Battery,
+  BatteryLow,
+  BatteryMedium,
   BatteryFull,
   BatteryCharging,
   Signal,
@@ -20,12 +20,15 @@ import {
   Search,
   X,
   Check,
-  Clock
+  Clock,
+  LogOut,
+  ChevronDown,
 } from 'lucide-react';
 import { useRobotStore } from '@/store/robotStore';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { useMQTT } from '@/providers/MQTTProvider';
+import { useAuthContext } from '@/providers/AuthProvider';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -35,9 +38,19 @@ interface HeaderProps {
 export function Header({ onMenuClick, title }: HeaderProps) {
   const { alerts, markAllAlertsRead, markAlertRead, batteryLevel: storeBattery } = useRobotStore();
   const mqtt = useMQTT();
+  const { user, logout } = useAuthContext();
   const batteryLevel = mqtt.robotStatus?.battery ?? storeBattery;
   const isConnected = mqtt.isConnected;
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const userInitials = (() => {
+    const source = user?.name || user?.email || '';
+    if (!source) return 'U';
+    const parts = source.replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+    const initials = parts.slice(0, 2).map((p) => p.charAt(0).toUpperCase()).join('');
+    return initials || source.charAt(0).toUpperCase();
+  })();
 
   const unreadCount = alerts.filter(n => !n.read).length;
 
@@ -224,13 +237,59 @@ export function Header({ onMenuClick, title }: HeaderProps) {
           )}
         </div>
 
-        {/* User Avatar (Desktop) */}
-        <button className="hidden md:flex items-center gap-2 p-1 pr-3 bg-dark-surface rounded-full hover:bg-dark-border transition-colors">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-kpatrol-400 to-kpatrol-600 flex items-center justify-center text-white text-sm font-bold">
-            VD
-          </div>
-          <span className="text-sm text-dark-text font-medium">Admin</span>
-        </button>
+        {/* User Avatar + dropdown — visible on mobile (avatar only) and desktop (avatar + name) */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUserMenu((v) => !v)}
+            aria-label="Tài khoản"
+            className={cn(
+              'flex items-center gap-2 p-1 md:pr-3 rounded-full transition-colors min-h-[44px]',
+              showUserMenu ? 'bg-dark-border' : 'bg-dark-surface hover:bg-dark-border',
+            )}
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-kpatrol-400 to-kpatrol-600 flex items-center justify-center text-white text-sm font-bold">
+              {userInitials}
+            </div>
+            <span className="hidden md:inline text-sm text-dark-text font-medium max-w-[8rem] truncate">
+              {user?.name || user?.email?.split('@')[0] || 'Khách'}
+            </span>
+            <ChevronDown className={cn('hidden md:inline w-4 h-4 text-dark-muted transition-transform', showUserMenu && 'rotate-180')} />
+          </button>
+
+          {showUserMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+              <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1rem)] bg-dark-card border border-dark-border rounded-xl shadow-xl z-50 overflow-hidden animate-slide-up">
+                <div className="p-4 border-b border-dark-border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-kpatrol-400 to-kpatrol-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {userInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-dark-text truncate">{user?.name || 'Khách'}</p>
+                      <p className="text-xs text-dark-muted truncate">{user?.email || '—'}</p>
+                      {user?.role && (
+                        <span className="inline-block mt-1 px-2 py-0.5 text-[10px] uppercase tracking-wide rounded-full bg-kpatrol-500/20 text-kpatrol-300">
+                          {user.role}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-status-error hover:bg-status-error/10 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="font-medium">Đăng xuất</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );
