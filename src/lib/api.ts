@@ -141,7 +141,7 @@ async function apiFetchStrict<T>(
   return (await res.json()) as T;
 }
 
-// ── Robot Events API (Public — no JWT) ──────────────────────────────────────
+// ── Robot Events API (Requires JWT — locked down 2026-05-15) ───────────────
 
 // Client-side dedup + throttle for `log()`.
 // Why: MQTTProvider calls log() on every chatty Pi message (HEARTBEAT, LOG,
@@ -186,6 +186,7 @@ export const robotEventsApi = {
     if (_logShouldDrop(key)) return null;
     return apiFetch<RobotEvent>('/robot-events', {
       method: 'POST',
+      headers: authHeaders(),
       body: JSON.stringify({
         robotSerial: getSerial(),
         ...event,
@@ -211,7 +212,9 @@ export const robotEventsApi = {
     if (eventType && eventType !== 'all') {
       params.set('eventType', eventType);
     }
-    const result = await apiFetch<RobotEventPage>(`/robot-events?${params}`);
+    const result = await apiFetch<RobotEventPage>(`/robot-events?${params}`, {
+      headers: authHeaders(),
+    });
     return result?.items ?? [];
   },
 
@@ -221,6 +224,7 @@ export const robotEventsApi = {
   async getStats(): Promise<RobotEventStats | null> {
     return apiFetch<RobotEventStats>(
       `/robot-events/stats?robotSerial=${getSerial()}`,
+      { headers: authHeaders() },
     );
   },
 
@@ -230,7 +234,7 @@ export const robotEventsApi = {
   async clearAll(): Promise<boolean> {
     const result = await apiFetch<{ count: number }>(
       `/robot-events?robotSerial=${getSerial()}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', headers: authHeaders() },
     );
     return result !== null;
   },
@@ -241,7 +245,7 @@ export const robotEventsApi = {
   async deleteOne(id: string): Promise<boolean> {
     const result = await apiFetch<{ count: number }>(
       `/robot-events/${id}?robotSerial=${getSerial()}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', headers: authHeaders() },
     );
     return result !== null;
   },
