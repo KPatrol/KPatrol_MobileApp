@@ -320,14 +320,5 @@ export function useSocket(config: SocketConfig) {
   };
 }
 
-// Export singleton hook for app-wide socket connection
-let globalSocketInstance: ReturnType<typeof useSocket> | null = null;
-
-export function useGlobalSocket() {
-  if (!globalSocketInstance) {
-    // This will be initialized with actual URL from environment or settings
-    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
-    // Note: This is a simplified version. In production, you'd use a context provider
-  }
-  return globalSocketInstance;
-}
+// App-wide socket access goes through SocketProvider's useSocketContext().
+// The previous useGlobalSocket() stub always returned null and is removed.

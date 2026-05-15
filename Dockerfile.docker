@@ -39,6 +39,21 @@ ENV NEXT_PUBLIC_ROBOT_SERIAL=$NEXT_PUBLIC_ROBOT_SERIAL
 ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# MQTT broker config — baked into client JS bundle for telemetry WebSocket.
+# Hardcoded fallbacks were removed from mqtt-config.ts 2026-05-15; if these
+# build args are empty the bundle still builds but telemetry will fail to
+# connect at runtime (console.error in browser).
+ARG NEXT_PUBLIC_MQTT_HOST=""
+ENV NEXT_PUBLIC_MQTT_HOST=$NEXT_PUBLIC_MQTT_HOST
+ARG NEXT_PUBLIC_MQTT_PORT=""
+ENV NEXT_PUBLIC_MQTT_PORT=$NEXT_PUBLIC_MQTT_PORT
+ARG NEXT_PUBLIC_MQTT_WS_PORT=""
+ENV NEXT_PUBLIC_MQTT_WS_PORT=$NEXT_PUBLIC_MQTT_WS_PORT
+ARG NEXT_PUBLIC_MQTT_USERNAME=""
+ENV NEXT_PUBLIC_MQTT_USERNAME=$NEXT_PUBLIC_MQTT_USERNAME
+ARG NEXT_PUBLIC_MQTT_PASSWORD=""
+ENV NEXT_PUBLIC_MQTT_PASSWORD=$NEXT_PUBLIC_MQTT_PASSWORD
+
 # Build application with standalone output
 RUN npm install -g pnpm && \
     pnpm build

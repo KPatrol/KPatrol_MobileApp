@@ -58,19 +58,20 @@ export function RobotProvider({ children }: { children: ReactNode }) {
     isLoading: false,
   });
 
-  // Sync auth token into api client
+  // Sync auth token + load robots in a single effect. Must run together so the
+  // module-scope _authToken inside api.ts is set BEFORE robotsApi.getAll fires;
+  // otherwise the first request after login goes out with no Bearer header,
+  // the backend returns [] (no 401 — auth guard sees no token, scoping returns
+  // empty list), and the UI shows "no robots" until the user reloads.
   useEffect(() => {
-    setAuthToken(token);
-  }, [token]);
-
-  // Load robots when authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !token) {
+      setAuthToken(null);
       dispatch({ type: 'CLEAR' });
       return;
     }
+    setAuthToken(token);
     loadRobots();
-  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadRobots = async () => {
     dispatch({ type: 'LOADING' });

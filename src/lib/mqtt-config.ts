@@ -1,16 +1,37 @@
 // MQTT Configuration for K-Patrol Robot
-// Connection to VPS MQTT Broker
+// Connection to VPS MQTT Broker.
+//
+// SECURITY NOTE — NEXT_PUBLIC_* values are bundled into client JS, so the
+// MQTT username/password below are visible in DevTools to any logged-in
+// user. This is acceptable ONLY because the EMQX ACL restricts these creds
+// to read-only on `kpatrol/+/T/#` and publish-only on safe command topics,
+// AND because all sensitive operations (start/stop patrol, motor control)
+// go through the JWT-protected REST API + Socket.IO gateway, never raw MQTT.
+// Hardcoded fallback creds were removed 2026-05-15; deploy must set the env
+// vars or the bundle will throw at first use.
+
+const _mqttUser = process.env.NEXT_PUBLIC_MQTT_USERNAME;
+const _mqttPass = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
+const _mqttHost = process.env.NEXT_PUBLIC_MQTT_HOST;
+if (typeof window !== 'undefined' && (!_mqttUser || !_mqttPass || !_mqttHost)) {
+  // Surface misconfiguration loudly in the browser console. We don't throw
+  // at module-eval time because SSR/build steps also import this file.
+  // eslint-disable-next-line no-console
+  console.error(
+    '[mqtt-config] Missing NEXT_PUBLIC_MQTT_HOST / USERNAME / PASSWORD — telemetry will fail to connect.',
+  );
+}
 
 export const MQTT_CONFIG = {
   // Connection settings
-  host: process.env.NEXT_PUBLIC_MQTT_HOST ?? '103.81.84.43',
+  host: _mqttHost ?? '',
   port: Number(process.env.NEXT_PUBLIC_MQTT_PORT ?? 1883),
   wsPort: Number(process.env.NEXT_PUBLIC_MQTT_WS_PORT ?? 8083),
   protocol: 'mqtt',     // 'mqtt' for TCP, 'ws' for WebSocket
 
-  // Authentication
-  username: process.env.NEXT_PUBLIC_MQTT_USERNAME ?? 'alphaasimov2024',
-  password: process.env.NEXT_PUBLIC_MQTT_PASSWORD ?? 'gvB3DtGfus6U',
+  // Authentication (see SECURITY NOTE above)
+  username: _mqttUser ?? '',
+  password: _mqttPass ?? '',
 
   // Client options
   clientId: `kpatrol_web_${Math.random().toString(16).slice(2, 10)}`,

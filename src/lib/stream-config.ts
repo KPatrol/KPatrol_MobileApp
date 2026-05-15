@@ -6,19 +6,33 @@
  * - Powered by uStreamer optimized for Raspberry Pi
  */
 
+// Public stream endpoints (Cloudflare Tunnel) — overridable per environment.
+const PUBLIC_STREAM_BASE =
+  process.env.NEXT_PUBLIC_STREAM_BASE_URL ?? 'https://stream.khoavd.online';
+const PUBLIC_API_BASE =
+  process.env.NEXT_PUBLIC_STREAM_API_BASE_URL ?? 'https://api.khoavd.online';
+
+// Local LAN fallback — only relevant when the operator's browser shares a
+// network with the Pi. Set NEXT_PUBLIC_LOCAL_PI_HOST=<ip-or-hostname>:8080
+// to enable; an empty value disables local fallback entirely so we don't
+// dial a stale IP from a previous demo network.
+const LOCAL_HOST = process.env.NEXT_PUBLIC_LOCAL_PI_HOST ?? '';
+const LOCAL_API_HOST = process.env.NEXT_PUBLIC_LOCAL_PI_API_HOST ?? '';
+
 export const STREAM_CONFIG = {
   // Public URLs via Cloudflare Tunnel
-  streamUrl: 'https://stream.khoavd.online/stream',
-  snapshotUrl: 'https://stream.khoavd.online/snapshot',
-  stateUrl: 'https://stream.khoavd.online/state',
-  streamApiUrl: 'https://api.khoavd.online/api/stream-info',
-  
-  // Local fallback URLs (when on same network - faster)
-  localStreamUrl: 'http://192.168.199.108:8080/stream',
-  localSnapshotUrl: 'http://192.168.199.108:8080/snapshot',
-  localStateUrl: 'http://192.168.199.108:8080/state',
-  localApiUrl: 'http://192.168.199.108:5000/api/stream-info',
-  
+  streamUrl: `${PUBLIC_STREAM_BASE}/stream`,
+  snapshotUrl: `${PUBLIC_STREAM_BASE}/snapshot`,
+  stateUrl: `${PUBLIC_STREAM_BASE}/state`,
+  streamApiUrl: `${PUBLIC_API_BASE}/api/stream-info`,
+
+  // Local fallback URLs (when on same network - faster). Empty when env var
+  // unset; consumers should `if (STREAM_CONFIG.localStreamUrl)` before use.
+  localStreamUrl:   LOCAL_HOST ? `http://${LOCAL_HOST}/stream`   : '',
+  localSnapshotUrl: LOCAL_HOST ? `http://${LOCAL_HOST}/snapshot` : '',
+  localStateUrl:    LOCAL_HOST ? `http://${LOCAL_HOST}/state`    : '',
+  localApiUrl:      LOCAL_API_HOST ? `http://${LOCAL_API_HOST}/api/stream-info` : '',
+
   // Stream settings
   defaultQuality: '720p' as const,
   reconnectInterval: 3000, // ms
