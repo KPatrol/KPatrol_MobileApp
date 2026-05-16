@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, ReactNode } from 'react';
 import { Robot, robotsApi, setAuthToken, setActiveRobotSerial } from '@/lib/api';
 import { useAuthContext } from './AuthProvider';
+import { useBackendDashboardSocket, type RobotStatusChanged } from '@/hooks/useBackendDashboardSocket';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ type RobotAction =
   | { type: 'LOADING' }
   | { type: 'SET_ROBOTS'; robots: Robot[]; selected: Robot | null }
   | { type: 'SELECT'; robot: Robot }
+  | { type: 'PATCH_ROBOT'; robotId: string; patch: Partial<Robot> }
   | { type: 'CLEAR' };
 
 interface RobotContextValue extends RobotState {
@@ -41,6 +43,20 @@ function reducer(state: RobotState, action: RobotAction): RobotState {
       return { robots: action.robots, selectedRobot: action.selected, isLoading: false };
     case 'SELECT':
       return { ...state, selectedRobot: action.robot };
+    case 'PATCH_ROBOT': {
+      // Merge a realtime status update from the backend Socket.IO bridge into
+      // the cached list (and selectedRobot if it matches). We avoid a list
+      // refetch so the listing page reflects the heartbeat flip within ~1
+      // network RTT instead of the 5s REST poll cadence.
+      const robots = state.robots.map((r) =>
+        r.id === action.robotId ? { ...r, ...action.patch } : r,
+      );
+      const selectedRobot =
+        state.selectedRobot && state.selectedRobot.id === action.robotId
+          ? { ...state.selectedRobot, ...action.patch }
+          : state.selectedRobot;
+      return { ...state, robots, selectedRobot };
+    }
     case 'CLEAR':
       return { robots: [], selectedRobot: null, isLoading: false };
     default:
@@ -94,6 +110,27 @@ export function RobotProvider({ children }: { children: ReactNode }) {
   const refreshRobots = useCallback(async () => {
     await loadRobots();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime dashboard: push-merge ONLINE↔OFFLINE flips from backend without
+  // waiting for the next REST poll. The gateway only emits to our `user:`
+  // room, so we don't filter — every event here is already ours.
+  const handleStatusChanged = useCallback((evt: RobotStatusChanged) => {
+    const status = evt.status?.toString().toLowerCase();
+    dispatch({
+      type: 'PATCH_ROBOT',
+      robotId: evt.robotId,
+      patch: {
+        status,
+        lastSeen: evt.lastSeen,
+      } as Partial<Robot>,
+    });
+  }, []);
+
+  useBackendDashboardSocket({
+    token,
+    enabled: isAuthenticated && Boolean(token),
+    onStatusChanged: handleStatusChanged,
+  });
 
   const createRobot = useCallback(
     async (data: { name: string; serialNumber: string; description?: string }) => {

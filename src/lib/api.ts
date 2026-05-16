@@ -24,7 +24,9 @@ function resolveApiBase(): string {
   return ''; // same-origin
 }
 
-const API_BASE = resolveApiBase();
+// Exported so the Socket.IO client (useBackendDashboardSocket) can reuse the
+// same resolution: '' (same-origin) in prod, http://localhost:4001 in dev.
+export const API_BASE = resolveApiBase();
 
 export const API_URL = `${API_BASE}/api`;
 
