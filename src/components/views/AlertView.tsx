@@ -163,15 +163,7 @@ export function AlertView() {
       {/* Feed (inner scroll) */}
       <div className="min-h-[400px] md:flex-1 md:min-h-0 md:overflow-y-auto -mx-1 px-1">
         {filtered.length === 0 ? (
-          <div className="h-full rounded-3xl ring-1 ring-dashed ring-slate-700/50 bg-gradient-to-br from-slate-900/60 via-slate-900/30 to-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-6">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/30 flex items-center justify-center shadow-[0_0_22px_rgba(74,222,128,0.25)]">
-              <CheckCircle2 className="w-8 h-8 text-emerald-300" />
-            </div>
-            <div className="text-center">
-              <p className="text-white font-black uppercase tracking-widest">Không có cảnh báo</p>
-              <p className="text-slate-400 text-[11px] mt-1 uppercase tracking-wider font-bold">Robot đang tuần tra an toàn — mọi thứ bình thường.</p>
-            </div>
-          </div>
+          <EmptyAlertState />
         ) : (
           <div className="space-y-2 pb-2">
             {filtered.map((alert, i) => {
@@ -205,16 +197,14 @@ export function AlertView() {
                       </div>
                     </div>
                   ) : (
-                    <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ring-1', meta.bg, meta.ring, meta.text)}>
-                      <Icon className="w-5 h-5" />
-                    </div>
+                    <DetectionGlyph kind={alert.kind} />
                   )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-white font-black text-sm uppercase tracking-wider">{meta.label}</span>
                       <span className={cn('text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-md ring-1', meta.text, meta.ring, meta.bg)}>
-                        {pct}% conf
+                        ĐCX {pct}%
                       </span>
                       {alert.kind === 'fire' && (
                         <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-red-500/20 text-red-300 ring-1 ring-red-500/40 animate-pulse">
@@ -223,7 +213,7 @@ export function AlertView() {
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums truncate">
-                      bbox=[{bx},{by},{bw},{bh}] · {alert.snapshot ?? 'no snapshot'}
+                      khung=[{bx},{by},{bw},{bh}] · {alert.snapshot ?? 'chưa có ảnh'}
                     </p>
                   </div>
 
@@ -323,7 +313,7 @@ function AlertDetailModal({ alert, onClose }: { alert: DetectionAlert; onClose: 
               className="w-full h-full object-contain"
             />
             <span className="absolute top-2 left-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-slate-950/80 text-slate-300 ring-1 ring-slate-700/60 font-mono">
-              {alert.snapshot ?? 'inline JPEG'}
+              {alert.snapshot ?? 'Ảnh nhúng JPEG'}
             </span>
           </div>
         ) : (
@@ -335,11 +325,11 @@ function AlertDetailModal({ alert, onClose }: { alert: DetectionAlert; onClose: 
         )}
 
         <div className="p-4 space-y-2">
-          <Row label="Robot" value={alert.robot} mono />
-          <Row label="Timestamp" value={String(alert.ts)} mono />
-          <Row label="Frame" value={`${fw} × ${fh}px`} />
-          <Row label="Bounding box" value={`x=${bx}, y=${by}, w=${bw}, h=${bh}`} mono />
-          <Row label="Confidence" value={`${pct}%`} />
+          <Row label="Mã robot" value={alert.robot} mono />
+          <Row label="Thời gian" value={new Date(alert.ts * 1000).toLocaleString('vi-VN')} mono />
+          <Row label="Khung hình" value={`${fw} × ${fh}px`} />
+          <Row label="Khung phát hiện" value={`x=${bx}, y=${by}, w=${bw}, h=${bh}`} mono />
+          <Row label="Độ chính xác" value={`${pct}%`} />
         </div>
 
         <div className="p-4 border-t border-slate-700/40">
@@ -360,6 +350,137 @@ function Row({ label, value, mono = false }: { label: string; value: string; mon
     <div className="flex items-center justify-between gap-3 py-1">
       <span className="text-slate-500 text-[11px] uppercase tracking-wider font-bold">{label}</span>
       <span className={cn('text-slate-200 text-xs truncate', mono && 'font-mono tabular-nums')}>{value}</span>
+    </div>
+  );
+}
+
+// Icon-chip thumbnail rendered when Pi did not attach a snapshot_b64 to the
+// alert. Inline SVG so the UI remains usable fully offline — no remote assets.
+function DetectionGlyph({ kind }: { kind: DetectionKind }) {
+  const meta = kindMeta[kind];
+  const Icon = meta.icon;
+  return (
+    <div
+      className={cn(
+        'relative w-16 h-16 rounded-xl overflow-hidden shrink-0 ring-1',
+        meta.bg,
+        meta.ring,
+        meta.glow,
+      )}
+    >
+      <svg
+        viewBox="0 0 64 64"
+        className={cn('absolute inset-0 w-full h-full opacity-60', meta.text)}
+        aria-hidden
+      >
+        <defs>
+          <radialGradient id={`glow-${kind}`} cx="50%" cy="55%" r="55%">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
+            <stop offset="70%" stopColor="currentColor" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+          </radialGradient>
+          <pattern id={`grid-${kind}`} width="6" height="6" patternUnits="userSpaceOnUse">
+            <path d="M 6 0 L 0 0 0 6" fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="0.4" />
+          </pattern>
+        </defs>
+        <rect width="64" height="64" fill={`url(#grid-${kind})`} />
+        <circle cx="32" cy="34" r="26" fill={`url(#glow-${kind})`} />
+        {kind === 'person' && (
+          <g stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.5">
+            <circle cx="32" cy="34" r="10" />
+            <circle cx="32" cy="34" r="18" strokeDasharray="2 3" />
+            <circle cx="32" cy="34" r="26" strokeDasharray="1 4" />
+          </g>
+        )}
+        {kind === 'fire' && (
+          <g stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.55">
+            <path d="M 12 50 Q 32 30 52 50" />
+            <path d="M 16 54 Q 32 38 48 54" strokeDasharray="2 2" />
+            <path d="M 20 58 Q 32 46 44 58" strokeDasharray="1 3" />
+          </g>
+        )}
+        {kind === 'motion' && (
+          <g stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.5">
+            <path d="M 8 22 L 22 22 M 8 32 L 32 32 M 8 42 L 22 42" strokeDasharray="2 2" />
+            <path d="M 42 22 L 56 22 M 42 32 L 56 32 M 42 42 L 56 42" strokeDasharray="2 2" />
+          </g>
+        )}
+      </svg>
+      <Icon className={cn('absolute inset-0 m-auto w-6 h-6 drop-shadow-[0_0_8px_currentColor]', meta.text)} />
+      <div
+        className={cn(
+          'absolute bottom-0 left-0 right-0 px-1 py-0.5 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider backdrop-blur-[2px]',
+          meta.bg,
+          meta.text,
+        )}
+      >
+        {meta.label}
+      </div>
+    </div>
+  );
+}
+
+// Idle/empty state. Animated radar sweep over a person + flame silhouette to
+// signal "AI is actively watching, nothing flagged yet" — pure SVG so the
+// empty state works offline and degrades gracefully if motion is disabled.
+function EmptyAlertState() {
+  return (
+    <div className="h-full rounded-3xl ring-1 ring-dashed ring-slate-700/50 bg-gradient-to-br from-slate-900/60 via-slate-900/30 to-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6">
+      <div className="relative w-44 h-44">
+        <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full">
+          <defs>
+            <radialGradient id="empty-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.25" />
+              <stop offset="60%" stopColor="#22d3ee" stopOpacity="0.05" />
+              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+            </radialGradient>
+            <linearGradient id="empty-sweep" x1="100" y1="100" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.55" />
+              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+            </linearGradient>
+            <pattern id="empty-grid" width="10" height="10" patternUnits="userSpaceOnUse">
+              <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#22d3ee" strokeOpacity="0.08" strokeWidth="0.6" />
+            </pattern>
+          </defs>
+          <circle cx="100" cy="100" r="92" fill="url(#empty-glow)" />
+          <rect x="8" y="8" width="184" height="184" rx="14" fill="url(#empty-grid)" />
+          <g stroke="#22d3ee" strokeOpacity="0.35" fill="none">
+            <circle cx="100" cy="100" r="86" />
+            <circle cx="100" cy="100" r="62" strokeDasharray="3 5" />
+            <circle cx="100" cy="100" r="38" strokeDasharray="2 4" />
+            <line x1="14" y1="100" x2="186" y2="100" strokeDasharray="2 6" />
+            <line x1="100" y1="14" x2="100" y2="186" strokeDasharray="2 6" />
+          </g>
+          {/* Animated radar sweep — Tailwind animate-spin (1s) slowed via custom duration */}
+          <g className="origin-center animate-[spin_6s_linear_infinite]" style={{ transformOrigin: '100px 100px' }}>
+            <path d="M 100 100 L 100 14 A 86 86 0 0 1 174 60 Z" fill="url(#empty-sweep)" opacity="0.7" />
+          </g>
+          {/* Person silhouette */}
+          <g transform="translate(70 78)" fill="#a78bfa" opacity="0.85">
+            <circle cx="10" cy="6" r="5" />
+            <path d="M 2 26 Q 10 14 18 26 L 18 36 Q 10 32 2 36 Z" />
+          </g>
+          {/* Flame silhouette */}
+          <g transform="translate(112 78)" fill="#fb923c" opacity="0.85">
+            <path d="M 8 36 Q -2 26 4 16 Q 6 22 8 18 Q 12 8 16 16 Q 20 26 14 32 Q 12 28 10 32 Q 12 34 8 36 Z" />
+          </g>
+        </svg>
+        {/* Center pulse */}
+        <div className="absolute inset-0 m-auto w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+        <div className="absolute inset-0 m-auto w-2.5 h-2.5 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(74,222,128,0.85)]" />
+      </div>
+      <div className="text-center">
+        <p className="text-white font-black uppercase tracking-widest flex items-center justify-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+          Không có cảnh báo
+        </p>
+        <p className="text-slate-400 text-[11px] mt-1 uppercase tracking-wider font-bold">
+          AI đang quét người &amp; lửa — khu vực tuần tra an toàn.
+        </p>
+      </div>
+      <style jsx>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
