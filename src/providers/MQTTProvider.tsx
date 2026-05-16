@@ -35,6 +35,8 @@ import {
 import { useRobotStore } from '@/store/robotStore';
 import { robotEventsApi, robotAlertsApi, PrismaAlert } from '@/lib/api';
 import { useRobotContext } from './RobotProvider';
+import { useAuthContext } from './AuthProvider';
+import { useRobotSafetySocket } from '@/hooks/useRobotSafetySocket';
 
 // Map Prisma Alert enum → mobile-app DetectionKind. Returns null for alert
 // types that don't fit the detection-alert UX (LOW_BATTERY, IMU_ERROR, …);
@@ -171,6 +173,65 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
   const [safetyStatus, setSafetyStatus] = useState<SafetyStatus | null>(null);
   const [imuData, setImuData] = useState<IMUData | null>(null);
   const [safetyEnabled, setSafetyEnabledState] = useState(true);
+  // Newest-wins merge guard: safety can arrive from two paths (direct MQTT-
+  // over-WSS and the backend Socket.IO `/robot` bridge). The Pi stamps each
+  // frame with epoch-ms in `timestamp`. We accept whichever path delivers a
+  // frame first and drop the duplicate, so toasts and store updates fire once.
+  const lastSafetyTsRef = useRef<number>(0);
+  // Zone-edge tracker: Pi publishes safety at 5 Hz. logAlert/logEvent must
+  // fire only on zone transitions, not every 200 ms, or the toast pipeline
+  // floods and the radar UI feels unresponsive ("phản hồi rất chậm").
+  const lastSafetyZoneRef = useRef<SafetyStatus['zone'] | null>(null);
+
+  // Merge safety frames from either delivery path (direct MQTT or `/robot`
+  // socket bridge). Drop older/duplicate timestamps; fire zone alerts only
+  // on transitions so the 5 Hz cadence doesn't flood the toast pipeline.
+  const applyMergedSafety = useCallback((safety: SafetyStatus | null | undefined) => {
+    if (!safety || typeof safety !== 'object') return;
+    const ts = typeof safety.timestamp === 'number' ? safety.timestamp : 0;
+    if (ts > 0 && ts <= lastSafetyTsRef.current) return;
+    if (ts > 0) lastSafetyTsRef.current = ts;
+    setSafetyStatus(safety);
+    if (safety.enabled !== undefined) setSafetyEnabledState(safety.enabled);
+
+    const zone = safety.zone ?? 'safe';
+    if (zone === lastSafetyZoneRef.current) return;
+    lastSafetyZoneRef.current = zone;
+    if (zone === 'danger') {
+      useRobotStore.getState().addHistoryItem({
+        type: 'safety' as any,
+        title: 'Vùng NGUY HIỂM',
+        description: `Phát hiện vật cản cực gần: ${safety.min_distance}mm`,
+        details: { zone, min_distance: safety.min_distance, tof: safety.tof },
+      });
+      robotEventsApi.log({
+        eventType: 'safety',
+        title: 'Vùng NGUY HIỂM',
+        description: `Phát hiện vật cản cực gần: ${safety.min_distance}mm`,
+        severity: 'error',
+        data: { zone, min_distance: safety.min_distance },
+      });
+      useRobotStore.getState().addAlert({
+        type: 'error',
+        title: 'Nguy hiểm - Vật cản!',
+        message: `Phát hiện vật cản: ${safety.min_distance}mm - Robot đã dừng khẩn cấp`,
+      });
+    } else if (zone === 'caution') {
+      useRobotStore.getState().addHistoryItem({
+        type: 'safety' as any,
+        title: 'Vùng THẬN TRỌNG',
+        description: `Vật cản gần: ${safety.min_distance}mm, tốc độ 50%`,
+        details: { zone, min_distance: safety.min_distance },
+      });
+      robotEventsApi.log({
+        eventType: 'safety',
+        title: 'Vùng THẬN TRỌNG',
+        description: `Vật cản gần: ${safety.min_distance}mm`,
+        severity: 'warning',
+        data: { zone, min_distance: safety.min_distance },
+      });
+    }
+  }, []);
 
   // V5.3: Autonomous navigation state
   const [navStatus, setNavStatus] = useState<NavStatus | null>(null);
@@ -198,8 +259,21 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
 
   // Pull selected robot serial from RobotProvider
   const { selectedRobot } = useRobotContext();
+  const { token, isAuthenticated } = useAuthContext();
   const activeSerial = selectedRobot?.serialNumber ?? 'KPATROL-001';
   const activeRobotId = selectedRobot?.id ?? null;
+
+  // Socket.IO `/robot` bridge: backend re-emits MQTT safety frames over the
+  // same origin as the REST API. Mobile data + corporate proxies routinely
+  // stall the direct MQTT-over-WSS connection at 5 Hz — this socket path
+  // keeps the radar responsive even when the direct path is degraded. The
+  // newest-timestamp-wins merge in applyMergedSafety drops duplicates.
+  useRobotSafetySocket({
+    token,
+    robotId: activeRobotId,
+    enabled: isAuthenticated && Boolean(token) && Boolean(activeRobotId),
+    onSafety: applyMergedSafety,
+  });
   // Keep a ref so async callbacks (connect, re-subscribe) always read latest serial
   const activeSerialRef = useRef<string>(activeSerial);
 
@@ -437,8 +511,7 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
         if (status.lightState !== undefined) setLightState(status.lightState);
         if (status.mainLightState !== undefined) setMainLightState(status.mainLightState);
         if ((status as any).safety) {
-          setSafetyStatus((status as any).safety);
-          setSafetyEnabledState((status as any).safety.enabled ?? true);
+          applyMergedSafety((status as any).safety as SafetyStatus);
         }
         if ((status as any).imu) setImuData((status as any).imu);
         if (status.battery !== undefined && status.battery < 20) {
@@ -499,21 +572,10 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
         }
         break;
 
-      // V3: Safety data
+      // V3: Safety data. The merging setter handles zone-edge dedupe and
+      // newest-wins arbitration with the Socket.IO `/robot` bridge fallback.
       case T.SAFETY: {
-        const newSafety = payload as SafetyStatus;
-        setSafetyStatus(newSafety);
-        setSafetyEnabledState(newSafety.enabled ?? true);
-        if (newSafety.zone === 'danger') {
-          logEvent('safety', 'Vùng NGUY HIỂM', `Phát hiện vật cản cực gần: ${newSafety.min_distance}mm`, 'error', {
-            zone: newSafety.zone, min_distance: newSafety.min_distance, tof: newSafety.tof,
-          });
-          logAlert('error', '🚨 Nguy hiểm - Vật cản!', `Phát hiện vật cản: ${newSafety.min_distance}mm - Robot đã dừng khẩn cấp`);
-        } else if (newSafety.zone === 'caution') {
-          logEvent('safety', 'Vùng THẬN TRỌNG', `Vật cản gần: ${newSafety.min_distance}mm, tốc độ 50%`, 'warning', {
-            zone: newSafety.zone, min_distance: newSafety.min_distance,
-          });
-        }
+        applyMergedSafety(payload as SafetyStatus);
         break;
       }
 
@@ -552,7 +614,7 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
         };
         const title = kindLabel[alert.kind] ?? `Phát hiện ${alert.kind}`;
         const pct = Math.round((alert.confidence ?? 0) * 100);
-        const description = `${title} (${pct}% tin cậy) — ${alert.snapshot ?? 'không có ảnh'}`;
+        const description = `${title} (độ chính xác ${pct}%) — ${alert.snapshot ?? 'chưa có ảnh'}`;
         const severity: 'info' | 'warning' | 'error' =
           alert.kind === 'fire' ? 'error' : alert.kind === 'person' ? 'warning' : 'info';
 
@@ -581,7 +643,7 @@ export function MQTTProvider({ children }: MQTTProviderProps) {
       default:
         break;
     }
-  }, [isRobotOnline]);
+  }, [isRobotOnline, applyMergedSafety]);
 
   // Disconnect
   const disconnect = useCallback(() => {
