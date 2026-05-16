@@ -1,11 +1,11 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, memo } from 'react';
 import { useRobotStore } from '@/store/robotStore';
 import { useMQTT, useRobotControl } from '@/providers/MQTTProvider';
 import { useAppMode } from '@/providers/AppModeProvider';
 import { cn } from '@/lib/utils';
-import { MotorPosition } from '@/lib/mqtt-config';
+import { MotorPosition, SafetyStatus, SafetyZone } from '@/lib/mqtt-config';
 import { STREAM_CONFIG } from '@/lib/stream-config';
 import { 
   StopCircle, 
@@ -214,9 +214,9 @@ function CockpitHeader({
             )} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm md:text-base font-black text-white tracking-wider leading-tight uppercase">Cockpit</h2>
+            <h2 className="text-sm md:text-base font-black text-white tracking-wider leading-tight uppercase">Buồng lái</h2>
             <p className="text-[10px] text-slate-400 uppercase tracking-wider truncate">
-              {controlMode === 'joystick' ? 'Joystick mode' : 'D-Pad mode'}
+              {controlMode === 'joystick' ? 'Chế độ joystick' : 'Chế độ D-Pad'}
               <span className="mx-1 text-slate-600">·</span>
               <span className={cn('font-bold', isRobotOnline ? 'text-emerald-400' : 'text-red-400')}>
                 {isRobotOnline ? 'Online' : 'Offline'}
@@ -340,7 +340,7 @@ function PowerRingControl({
 
       {/* Top-left badge: speed % readout */}
       <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 flex flex-col items-start">
-        <span className="text-[10px] md:text-xs uppercase tracking-widest text-slate-500 leading-none">Speed</span>
+        <span className="text-[10px] md:text-xs uppercase tracking-widest text-slate-500 leading-none">Tốc độ</span>
         <div className="flex items-baseline gap-0.5">
           <span className="text-4xl md:text-5xl font-black text-cyan-300 leading-none tabular-nums">
             {speedLevel}
@@ -642,26 +642,57 @@ function AttitudeHUD() {
   );
 }
 
-// ── DirectionalSafetyMini: 6-direction radar (compact) ──
-function DirectionalSafetyMini() {
-  const { safetyStatus, safetyEnabled } = useMQTT();
-  const dirs = safetyStatus?.directions;
-  const minDist = safetyStatus?.min_distance ?? 0;
-  const zone = safetyStatus?.zone ?? 'safe';
-  const zoneHex = zone === 'danger' ? '#f87171' : zone === 'caution' ? '#fb923c' : zone === 'slow' ? '#fbbf24' : '#34d399';
+// ── DirectionalSafetyMini: 6-lane radar with labels + distance text ──
+// Renders one beam per VL53L0X ToF lane (front/front_left/front_right/left/right/back),
+// honoring `valid_mask` so a broken sensor (e.g. CH2 front-right) shows OFFLINE instead
+// of fake distance=0. Memoized so 5Hz safety frames only re-render the visualization,
+// not the parent ControlView tree.
+const ZONE_HEX: Record<SafetyZone, string> = {
+  safe:    '#34d399',
+  slow:    '#fbbf24',
+  caution: '#fb923c',
+  danger:  '#f87171',
+};
 
-  // 6 directions with their angles (deg, 0=up, clockwise)
-  const beams: { key: 'forward' | 'forwardLeft' | 'forwardRight' | 'left' | 'right' | 'backward'; angle: number; label: string }[] = [
-    { key: 'forward',      angle:    0, label: 'Trước' },
-    { key: 'forwardLeft',  angle: -45,  label: 'Trước-Trái' },
-    { key: 'forwardRight', angle:  45,  label: 'Trước-Phải' },
-    { key: 'left',         angle: -90,  label: 'Trái' },
-    { key: 'right',        angle:  90,  label: 'Phải' },
-    { key: 'backward',     angle: 180,  label: 'Sau' },
-  ];
+type LaneKey = 'front' | 'front_left' | 'front_right' | 'left' | 'right' | 'back';
+interface Lane {
+  key: LaneKey;
+  bit: number;       // valid_mask bit index
+  angle: number;     // deg, 0 = forward (up), clockwise
+  short: string;     // ~3-char abbreviation for SVG text
+  full: string;      // tooltip / legend
+}
+
+const LANES: Lane[] = [
+  { key: 'front',       bit: 0, angle:    0, short: 'F',  full: 'Trước' },
+  { key: 'front_left',  bit: 1, angle:  -45, short: 'FL', full: 'Trước-Trái' },
+  { key: 'front_right', bit: 2, angle:   45, short: 'FR', full: 'Trước-Phải' },
+  { key: 'left',        bit: 3, angle:  -90, short: 'L',  full: 'Trái' },
+  { key: 'right',       bit: 4, angle:   90, short: 'R',  full: 'Phải' },
+  { key: 'back',        bit: 5, angle:  180, short: 'B',  full: 'Sau' },
+];
+
+function classifyLaneZone(mm: number, thresholds?: SafetyStatus['thresholds']): SafetyZone {
+  if (!thresholds || mm <= 0) return 'safe';
+  if (mm < thresholds.danger)  return 'danger';
+  if (mm < thresholds.caution) return 'caution';
+  if (mm < thresholds.slow)    return 'slow';
+  return 'safe';
+}
+
+function DirectionalSafetyMiniBase() {
+  const { safetyStatus, safetyEnabled } = useMQTT();
+  const tof = safetyStatus?.tof;
+  const thresholds = safetyStatus?.thresholds;
+  const minDist = safetyStatus?.min_distance ?? 0;
+  const zone: SafetyZone = safetyStatus?.zone ?? 'safe';
+  const zoneHex = ZONE_HEX[zone];
+
+  // valid_mask: bit set => lane is healthy. Default 0x3F (all 6 valid) when undefined.
+  const validMask = typeof tof?.valid_mask === 'number' ? tof.valid_mask : 0x3F;
 
   return (
-    <div className="flex-1 min-h-[220px] rounded-2xl bg-slate-950/70 backdrop-blur-sm border border-slate-700/50 shadow-xl overflow-hidden flex flex-col">
+    <div className="flex-1 min-h-[260px] rounded-2xl bg-slate-950/70 backdrop-blur-sm border border-slate-700/50 shadow-xl overflow-hidden flex flex-col">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-slate-700/40 bg-slate-900/60">
         <div className="flex items-center gap-1.5">
@@ -670,66 +701,96 @@ function DirectionalSafetyMini() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-black uppercase tracking-wide" style={{ color: zoneHex }}>{zone}</span>
-          <span className="text-[10px] font-mono text-slate-300 tabular-nums px-1.5 py-0.5 rounded bg-slate-800/60">{minDist}mm</span>
+          <span className="text-[10px] font-mono text-slate-300 tabular-nums px-1.5 py-0.5 rounded bg-slate-800/60">
+            min {minDist}mm
+          </span>
         </div>
       </div>
 
       {/* Radar SVG */}
       <div className="relative flex-1 flex items-center justify-center min-h-0 py-2">
-        <svg viewBox="0 0 160 140" className="w-full h-full max-h-[260px]" preserveAspectRatio="xMidYMid meet">
-          {/* Concentric guide rings — extended */}
-          {[20, 40, 60].map((r) => (
-            <circle key={r} cx="80" cy="70" r={r} fill="none" stroke="rgba(100,116,139,0.22)" strokeWidth="0.6" strokeDasharray={r === 60 ? '0' : '2 3'} />
+        <svg viewBox="0 0 200 180" className="w-full h-full max-h-[300px]" preserveAspectRatio="xMidYMid meet">
+          {/* Concentric guide rings */}
+          {[25, 50, 75].map((r) => (
+            <circle key={r} cx="100" cy="90" r={r} fill="none" stroke="rgba(100,116,139,0.22)" strokeWidth="0.6" strokeDasharray={r === 75 ? '0' : '2 3'} />
           ))}
           {/* Crosshair */}
-          <line x1="80" y1="6" x2="80" y2="134" stroke="rgba(100,116,139,0.22)" strokeWidth="0.5" />
-          <line x1="14" y1="70" x2="146" y2="70" stroke="rgba(100,116,139,0.22)" strokeWidth="0.5" />
+          <line x1="100" y1="10" x2="100" y2="170" stroke="rgba(100,116,139,0.22)" strokeWidth="0.5" />
+          <line x1="20"  y1="90" x2="180" y2="90" stroke="rgba(100,116,139,0.22)" strokeWidth="0.5" />
 
           {/* Sweep gradient (subtle) */}
           <defs>
             <radialGradient id="radarSweep" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="rgba(34,211,238,0.10)" />
-              <stop offset="70%" stopColor="rgba(34,211,238,0.02)" />
+              <stop offset="0%"   stopColor="rgba(34,211,238,0.10)" />
+              <stop offset="70%"  stopColor="rgba(34,211,238,0.02)" />
               <stop offset="100%" stopColor="rgba(34,211,238,0)" />
             </radialGradient>
           </defs>
-          <circle cx="80" cy="70" r="60" fill="url(#radarSweep)" />
+          <circle cx="100" cy="90" r="75" fill="url(#radarSweep)" />
 
-          {/* Robot center — bigger, more prominent */}
-          <rect x="70" y="60" width="20" height="24" rx="4" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.8" />
-          <circle cx="80" cy="66" r="2.5" fill="#22d3ee" style={{ filter: 'drop-shadow(0 0 3px #22d3ee)' }} />
-          <line x1="80" y1="60" x2="80" y2="56" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" />
+          {/* Robot body */}
+          <rect x="88" y="78" width="24" height="28" rx="4" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.8" />
+          <circle cx="100" cy="85" r="2.5" fill="#22d3ee" style={{ filter: 'drop-shadow(0 0 3px #22d3ee)' }} />
+          <line x1="100" y1="78" x2="100" y2="73" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" />
 
-          {/* Beams */}
-          {beams.map((b) => {
-            const beam = dirs?.[b.key as keyof typeof dirs];
-            const distance = beam?.distance ?? 0;
-            const blocked = beam?.blocked ?? false;
-            const beamZone = beam?.zone ?? 'safe';
-            const color = blocked ? '#f87171'
-              : beamZone === 'danger' ? '#f87171'
-              : beamZone === 'caution' ? '#fb923c'
-              : beamZone === 'slow' ? '#fbbf24'
-              : '#34d399';
-            // Distance: 0-1000mm maps to 8-58px guide length (longer beams)
-            const guideLen = Math.max(10, Math.min(58, (distance / 1000) * 58));
-            const rad = ((b.angle - 90) * Math.PI) / 180;
-            const ox = 80 + Math.cos(rad) * 14;
-            const oy = 70 + Math.sin(rad) * 14;
-            const tx = 80 + Math.cos(rad) * (14 + guideLen);
-            const ty = 70 + Math.sin(rad) * (14 + guideLen);
+          {/* Beams + labels */}
+          {LANES.map((lane) => {
+            const valid = (validMask & (1 << lane.bit)) !== 0;
+            const distance = valid ? (tof?.[lane.key] ?? 0) : 0;
+            const beamZone = valid ? classifyLaneZone(distance, thresholds) : 'safe';
+            const color = valid ? ZONE_HEX[beamZone] : '#64748b';
+
+            // 0–1500mm maps to 14→72px (clamped). Invalid lanes use a short dashed stub.
+            const guideLen = valid
+              ? Math.max(14, Math.min(72, (distance / 1500) * 72))
+              : 32;
+            const rad = ((lane.angle - 90) * Math.PI) / 180;
+            const ox = 100 + Math.cos(rad) * 14;
+            const oy =  90 + Math.sin(rad) * 14;
+            const tx = 100 + Math.cos(rad) * (14 + guideLen);
+            const ty =  90 + Math.sin(rad) * (14 + guideLen);
+            // Label sits a bit past the beam tip
+            const lx = 100 + Math.cos(rad) * (14 + guideLen + 12);
+            const ly =  90 + Math.sin(rad) * (14 + guideLen + 12);
+
             return (
-              <g key={b.key}>
+              <g key={lane.key} opacity={safetyEnabled ? 1 : 0.4}>
                 <line
                   x1={ox} y1={oy} x2={tx} y2={ty}
-                  stroke={color} strokeWidth={blocked ? 3 : 2.2}
-                  opacity={safetyEnabled ? 0.95 : 0.35}
+                  stroke={color}
+                  strokeWidth={beamZone === 'danger' ? 3 : 2.2}
                   strokeLinecap="round"
+                  strokeDasharray={valid ? '0' : '3 2'}
                 />
-                <circle cx={tx} cy={ty} r={blocked ? 3.5 : 2.5} fill={color}
-                  opacity={safetyEnabled ? 1 : 0.4}
-                  style={{ filter: blocked ? `drop-shadow(0 0 5px ${color})` : `drop-shadow(0 0 2px ${color})` }}
+                <circle
+                  cx={tx} cy={ty}
+                  r={beamZone === 'danger' ? 3.5 : 2.5}
+                  fill={color}
+                  style={{ filter: beamZone === 'danger' ? `drop-shadow(0 0 5px ${color})` : `drop-shadow(0 0 2px ${color})` }}
                 />
+                {/* Direction abbreviation (always visible, near tip) */}
+                <text
+                  x={lx} y={ly}
+                  fill={color}
+                  fontSize="7"
+                  fontWeight="700"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                >
+                  {lane.short}
+                </text>
+                {/* Distance / OFFLINE text below abbreviation */}
+                <text
+                  x={lx} y={ly + 7}
+                  fill={valid ? '#cbd5e1' : '#64748b'}
+                  fontSize="5.5"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                >
+                  {valid ? `${distance}mm` : 'OFFLINE'}
+                </text>
               </g>
             );
           })}
@@ -744,9 +805,31 @@ function DirectionalSafetyMini() {
           </div>
         )}
       </div>
+
+      {/* Zone legend with threshold ranges */}
+      <div className="shrink-0 grid grid-cols-4 gap-1 px-2 py-1.5 border-t border-slate-700/40 bg-slate-900/40 text-[8.5px] font-mono tabular-nums">
+        <LegendChip color={ZONE_HEX.safe}    label="SAFE"    range={thresholds ? `≥${thresholds.slow}` : '—'} />
+        <LegendChip color={ZONE_HEX.slow}    label="SLOW"    range={thresholds ? `${thresholds.caution}-${thresholds.slow}` : '—'} />
+        <LegendChip color={ZONE_HEX.caution} label="CAUTION" range={thresholds ? `${thresholds.danger}-${thresholds.caution}` : '—'} />
+        <LegendChip color={ZONE_HEX.danger}  label="DANGER"  range={thresholds ? `<${thresholds.danger}` : '—'} />
+      </div>
     </div>
   );
 }
+
+function LegendChip({ color, label, range }: { color: string; label: string; range: string }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 px-1 py-0.5 rounded bg-slate-800/40">
+      <div className="flex items-center gap-1">
+        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}` }} />
+        <span className="font-bold text-slate-300">{label}</span>
+      </div>
+      <span className="text-slate-500">{range}mm</span>
+    </div>
+  );
+}
+
+const DirectionalSafetyMini = memo(DirectionalSafetyMiniBase);
 
 // ── ActionsRail: compact FAB row for quick actions ──
 function ActionsRail({
@@ -875,11 +958,11 @@ function MotorStrip() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40 bg-slate-900/60">
         <div className="flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Motor</span>
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Động cơ</span>
           {isDev && (
             <div className="flex gap-1 ml-0.5">
-              <div className={cn('w-2 h-2 rounded-full', isMotorControllerOnline ? 'bg-emerald-400' : 'bg-red-400')} title="Motor controller" />
-              <div className={cn('w-2 h-2 rounded-full', isEncoderReaderOnline ? 'bg-emerald-400' : 'bg-orange-400')} title="Encoder reader" />
+              <div className={cn('w-2 h-2 rounded-full', isMotorControllerOnline ? 'bg-emerald-400' : 'bg-red-400')} title="Bộ điều khiển động cơ" />
+              <div className={cn('w-2 h-2 rounded-full', isEncoderReaderOnline ? 'bg-emerald-400' : 'bg-orange-400')} title="Bộ đọc encoder" />
             </div>
           )}
         </div>
