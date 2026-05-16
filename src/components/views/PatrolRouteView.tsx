@@ -218,7 +218,7 @@ export function PatrolRouteView() {
           <HudCard
             tone="cyan"
             icon={MapPin}
-            title="Waypoints"
+            title="Điểm hành trình"
             actions={
               <button
                 onClick={clearWaypoints}

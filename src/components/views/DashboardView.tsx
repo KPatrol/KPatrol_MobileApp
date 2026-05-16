@@ -146,12 +146,12 @@ export function DashboardView() {
                   hasFix ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]' : 'bg-orange-400',
                 )}
               />
-              {hasFix ? 'LIVE' : 'WAIT GPS'}
+              {hasFix ? 'TRỰC TIẾP' : 'CHỜ GPS'}
             </div>
             <div className="px-3 py-1.5 rounded-full bg-slate-950/80 backdrop-blur-md ring-1 ring-slate-700/60 flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold text-slate-400">
               <MapPin className="w-3 h-3 text-kpatrol-400" />
-              <span className="hidden sm:inline">Phenikaa Campus</span>
-              <span className="sm:hidden">Campus</span>
+              <span className="hidden sm:inline">Khuôn viên Phenikaa</span>
+              <span className="sm:hidden">Khuôn viên</span>
             </div>
           </div>
 

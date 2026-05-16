@@ -1221,14 +1221,14 @@ export function CombinedRobotPanel() {
         {/* Motor header */}
         <div className="flex items-center gap-2 mb-2">
           <Activity className="w-4 h-4 text-kpatrol-400 flex-shrink-0" />
-          <span className="text-xs font-semibold text-slate-300 tracking-wide uppercase">Motors</span>
+          <span className="text-xs font-semibold text-slate-300 tracking-wide uppercase">Động cơ</span>
           <div className="flex gap-1 ml-2">
             <div className={`w-2 h-2 rounded-full ${isMotorControllerOnline ? 'bg-green-400' : 'bg-red-400'}`} title="ESP32-S3" />
             <div className={`w-2 h-2 rounded-full ${isEncoderReaderOnline ? 'bg-green-400' : 'bg-orange-400'}`} title="Encoder" />
           </div>
           <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ml-auto ${
             activeMotors > 0 ? 'bg-green-500/20 text-green-400' : 'bg-slate-700/60 text-slate-400'
-          }`}>{activeMotors}/4 Active</span>
+          }`}>{activeMotors}/4 hoạt động</span>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
           {motorList.map(({ id, label }) => {
